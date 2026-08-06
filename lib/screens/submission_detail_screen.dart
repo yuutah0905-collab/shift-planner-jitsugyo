@@ -1,0 +1,213 @@
+import 'package:flutter/material.dart';
+import '../models/shift_submission.dart';
+import '../services/firestore_service.dart';
+import '../theme/app_theme.dart';
+
+class SubmissionDetailScreen extends StatelessWidget {
+  final ShiftSubmission submission;
+
+  const SubmissionDetailScreen({super.key, required this.submission});
+
+  String _fmtMonthJp(String ym) {
+    final parts = ym.split('-');
+    if (parts.length != 2) return ym;
+    return '${parts[0]}年${int.parse(parts[1])}月';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filledDays = submission.days
+        .where((d) => d.hours.isNotEmpty || d.code.isNotEmpty)
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('${submission.name} さんの希望'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: '削除',
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('削除しますか？'),
+                  content: const Text('この提出データを削除します。この操作は取り消せません。'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('キャンセル'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text(
+                        '削除',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true && submission.id != null) {
+                await FirestoreService().deleteSubmission(submission.id!);
+                if (context.mounted) Navigator.of(context).pop();
+              }
+            },
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _row('氏名', submission.name),
+                    _row('部署', submission.department),
+                    _row('対象月', _fmtMonthJp(submission.targetMonth)),
+                    _row(
+                      '合計希望時間',
+                      '${submission.totalHours.toStringAsFixed(2)} h',
+                    ),
+                    _row('入力日数', '${submission.filledDaysCount} 日'),
+                    if (submission.submittedAt != null)
+                      _row(
+                        '提出日時',
+                        submission.submittedAt!.toLocal().toString(),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (submission.monthMemo.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '今月のメモ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.primaryDeep,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(submission.monthMemo),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'シフト希望詳細',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryDeep,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    if (filledDays.isEmpty)
+                      const Text(
+                        '入力されている日はありません',
+                        style: TextStyle(color: AppColors.inkMute),
+                      )
+                    else
+                      ...filledDays.map(
+                        (d) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 70,
+                                child: Text(
+                                  '${d.date.split('-').last}日(${d.dayOfWeek})',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.12,
+                                  ),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${d.code} ${d.hours}h',
+                                  style: const TextStyle(
+                                    color: AppColors.primaryDeep,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                              if (d.memo.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    d.memo,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.inkSoft,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 90,
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.inkMute),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

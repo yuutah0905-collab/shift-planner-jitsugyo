@@ -1,0 +1,562 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import '../models/app_config.dart';
+import '../models/day_entry.dart';
+import '../models/shift_submission.dart';
+import '../services/firestore_service.dart';
+import '../services/local_storage_service.dart';
+import '../theme/app_theme.dart';
+import '../widgets/day_cell.dart';
+import '../widgets/summary_card.dart';
+import 'admin_login_screen.dart';
+
+const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
+const List<String> _dowJpHeader = ['日', '月', '火', '水', '木', '金', '土'];
+
+class ShiftFormScreen extends StatefulWidget {
+  const ShiftFormScreen({super.key});
+
+  @override
+  State<ShiftFormScreen> createState() => _ShiftFormScreenState();
+}
+
+class _ShiftFormScreenState extends State<ShiftFormScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
+  final LocalStorageService _localStorage = LocalStorageService();
+
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _monthMemoController = TextEditingController();
+  String? _selectedDepartment;
+
+  AppConfig? _config;
+  Map<String, DayEntry> _days = {};
+  bool _loading = true;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+  }
+
+  Future<void> _init() async {
+    final config = await _firestoreService.fetchConfig();
+    _buildDays(config);
+    await _restoreLocalState(config);
+    setState(() {
+      _config = config;
+      _loading = false;
+    });
+  }
+
+  /// Pull-to-refresh: re-fetch the admin config (target month, holidays,
+  /// deadline, notice, departments) without showing the full-screen loader.
+  Future<void> _refresh() async {
+    final config = await _firestoreService.fetchConfig();
+    _buildDays(config);
+    await _restoreLocalState(config);
+    if (!mounted) return;
+    setState(() {
+      _config = config;
+    });
+    if (mounted) {
+      _showSnack('最新の設定を取得しました');
+    }
+  }
+
+  /// Builds a padded list of days (including leading blanks) so the
+  /// calendar can be rendered as a proper 7-column (Sun-Sat) weekly grid.
+  List<DayEntry?> _paddedDays(List<DayEntry> sortedDays) {
+    if (sortedDays.isEmpty) return [];
+    final firstDate = DateTime.parse(sortedDays.first.date);
+    final leadingBlanks = firstDate.weekday % 7; // Sun=0 ... Sat=6
+    final List<DayEntry?> padded = [
+      ...List<DayEntry?>.filled(leadingBlanks, null),
+      ...sortedDays,
+    ];
+    final remainder = padded.length % 7;
+    if (remainder != 0) {
+      padded.addAll(List<DayEntry?>.filled(7 - remainder, null));
+    }
+    return padded;
+  }
+
+  void _buildDays(AppConfig config) {
+    final parts = config.targetMonth.split('-');
+    if (parts.length != 2) {
+      _days = {};
+      return;
+    }
+    final year = int.tryParse(parts[0]) ?? DateTime.now().year;
+    final month = int.tryParse(parts[1]) ?? DateTime.now().month;
+    final lastDay = DateTime(year, month + 1, 0).day;
+    final holidaySet = config.holidays.toSet();
+
+    final Map<String, DayEntry> map = {};
+    for (int d = 1; d <= lastDay; d++) {
+      final date = DateTime(year, month, d);
+      final jpIndex = date.weekday % 7; // Mon=1..Sun=7 -> Sun=0
+      final dow = _dowJp[jpIndex];
+      final isWeekend = jpIndex == 0 || jpIndex == 6;
+      final dateStr =
+          '$year-${month.toString().padLeft(2, '0')}-${d.toString().padLeft(2, '0')}';
+      final isHoliday = isWeekend || holidaySet.contains(dateStr);
+      map[dateStr] = DayEntry(
+        date: dateStr,
+        dayOfWeek: dow,
+        isHoliday: isHoliday,
+      );
+    }
+    _days = map;
+  }
+
+  Future<void> _restoreLocalState(AppConfig config) async {
+    final saved = await _localStorage.loadState();
+    if (saved == null) return;
+    if (saved['targetMonth'] != config.targetMonth) {
+      // Different month than last time - don't restore day data
+      _nameController.text = saved['name']?.toString() ?? '';
+      final dept = saved['department']?.toString();
+      if (dept != null &&
+          dept.isNotEmpty &&
+          config.departments.contains(dept)) {
+        _selectedDepartment = dept;
+      }
+      return;
+    }
+    _nameController.text = saved['name']?.toString() ?? '';
+    _monthMemoController.text = saved['monthMemo']?.toString() ?? '';
+    final dept = saved['department']?.toString();
+    if (dept != null && dept.isNotEmpty && config.departments.contains(dept)) {
+      _selectedDepartment = dept;
+    }
+    final savedDays = saved['days'] as Map<String, dynamic>?;
+    if (savedDays != null) {
+      savedDays.forEach((key, value) {
+        if (_days.containsKey(key) && !_days[key]!.isHoliday) {
+          final v = Map<String, dynamic>.from(value as Map);
+          _days[key]!.hours = v['hours']?.toString() ?? '';
+          _days[key]!.code = v['code']?.toString() ?? '';
+          _days[key]!.memo = v['memo']?.toString() ?? '';
+        }
+      });
+    }
+  }
+
+  Future<void> _saveLocal() async {
+    if (_config == null) return;
+    await _localStorage.saveState(
+      name: _nameController.text,
+      department: _selectedDepartment ?? '',
+      monthMemo: _monthMemoController.text,
+      days: _days,
+      targetMonth: _config!.targetMonth,
+    );
+  }
+
+  void _onDayChanged() {
+    setState(() {});
+    _saveLocal();
+  }
+
+  double get _totalHours {
+    double total = 0;
+    for (final d in _days.values) {
+      final h = double.tryParse(d.hours);
+      if (h != null) total += h;
+    }
+    return total;
+  }
+
+  int get _filledDays =>
+      _days.values.where((d) => d.hours.isNotEmpty || d.code.isNotEmpty).length;
+
+  int get _memoCount => _days.values.where((d) => d.memo.isNotEmpty).length;
+
+  int get _holidayCount => _days.values.where((d) => d.isHoliday).length;
+
+  String _fmtMonthJp(String ym) {
+    final parts = ym.split('-');
+    if (parts.length != 2) return ym;
+    return '${parts[0]}年${int.parse(parts[1])}月';
+  }
+
+  Future<void> _submit() async {
+    if (_nameController.text.trim().isEmpty) {
+      _showSnack('氏名を入力してください');
+      return;
+    }
+    if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
+      _showSnack('部署を選択してください');
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final sortedDays = _days.values.toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      final submission = ShiftSubmission(
+        name: _nameController.text.trim(),
+        department: _selectedDepartment!,
+        targetMonth: _config!.targetMonth,
+        monthMemo: _monthMemoController.text.trim(),
+        days: sortedDays,
+        totalHours: _totalHours,
+      );
+      await _firestoreService.submitShift(submission);
+      await _localStorage.clearState();
+      if (mounted) {
+        _showSuccessDialog();
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('Submit error: $e');
+      if (mounted) {
+        _showSnack('送信に失敗しました。通信環境を確認して再度お試しください。');
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _showSnack(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: AppColors.success),
+            SizedBox(width: 8),
+            Text('送信完了'),
+          ],
+        ),
+        content: const Text('シフト希望が管理人に送信されました。\nご協力ありがとうございました！'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              setState(() {
+                _loading = true;
+              });
+              _init();
+            },
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _config == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final config = _config!;
+    final sortedDays = _days.values.toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final paddedDays = _paddedDays(sortedDays);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Image.asset(
+                'assets/icon/jitsugyo_logo.png',
+                height: 28,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${_fmtMonthJp(config.targetMonth)} シフト希望',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings_outlined),
+            tooltip: '管理者',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _refresh,
+                color: AppColors.primary,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (config.notice.isNotEmpty ||
+                          config.deadline.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (config.deadline.isNotEmpty)
+                                Text(
+                                  '受付締切: ${config.deadline}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryDeep,
+                                  ),
+                                ),
+                              if (config.notice.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    config.notice,
+                                    style: const TextStyle(
+                                      color: AppColors.inkSoft,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '基本情報',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDeep,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _nameController,
+                                decoration: const InputDecoration(
+                                  labelText: '氏名',
+                                  hintText: '氏名を入力',
+                                ),
+                                onChanged: (_) => _saveLocal(),
+                              ),
+                              const SizedBox(height: 10),
+                              DropdownButtonFormField<String>(
+                                initialValue: _selectedDepartment,
+                                decoration: const InputDecoration(
+                                  labelText: '部署',
+                                ),
+                                items: config.departments
+                                    .map(
+                                      (d) => DropdownMenuItem(
+                                        value: d,
+                                        child: Text(d),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (val) {
+                                  setState(() => _selectedDepartment = val);
+                                  _saveLocal();
+                                },
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                '記号（A〜Y）を選ぶと労働時間が自動で入ります',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.inkMute,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _fmtMonthJp(config.targetMonth),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDeep,
+                                  fontSize: 13,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SummaryCard(
+                                filledDays: _filledDays,
+                                totalHours: _totalHours,
+                                memoCount: _memoCount,
+                                holidayCount: _holidayCount,
+                              ),
+                              const SizedBox(height: 10),
+                              // Weekday header row (日〜土), matching the
+                              // admin settings calendar layout.
+                              Row(
+                                children: List.generate(7, (i) {
+                                  final color = i == 0
+                                      ? AppColors.sun
+                                      : i == 6
+                                      ? AppColors.sat
+                                      : AppColors.inkMute;
+                                  return Expanded(
+                                    child: Center(
+                                      child: Text(
+                                        _dowJpHeader[i],
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: color,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              const SizedBox(height: 6),
+                              GridView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 7,
+                                      childAspectRatio: 0.85,
+                                      crossAxisSpacing: 4,
+                                      mainAxisSpacing: 4,
+                                    ),
+                                itemCount: paddedDays.length,
+                                itemBuilder: (context, index) {
+                                  final entry = paddedDays[index];
+                                  if (entry == null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return DayCell(
+                                    entry: entry,
+                                    onChanged: _onDayChanged,
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'タップして記号・メモを入力できます（🟢=メモあり）',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.inkMute,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '今月のメモ（任意）',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDeep,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _monthMemoController,
+                                maxLines: 5,
+                                decoration: const InputDecoration(
+                                  hintText: '例：来月は忙しいので調整お願いします',
+                                ),
+                                onChanged: (_) => _saveLocal(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _submitting ? null : _submit,
+                  icon: _submitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send),
+                  label: Text(_submitting ? '送信中...' : 'シフト送信'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _monthMemoController.dispose();
+    super.dispose();
+  }
+}
