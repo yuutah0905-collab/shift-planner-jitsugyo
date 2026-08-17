@@ -36,15 +36,20 @@ class DayCell extends StatelessWidget {
     final isWeekend = entry.dayOfWeek == '日' || entry.dayOfWeek == '土';
     final hasInput = entry.code.isNotEmpty || entry.hours.isNotEmpty;
     final hasMemo = entry.memo.isNotEmpty;
+    final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
 
     Color bg = AppColors.surface;
     if (entry.isHoliday) {
       bg = AppColors.holidayBg;
     } else if (isWeekend) {
       bg = AppColors.weekendBg;
+    } else if (isPaidLeave) {
+      bg = AppColors.paidLeaveBg;
     } else if (hasInput) {
       bg = AppColors.primary.withValues(alpha: 0.10);
     }
+
+    final accentColor = isPaidLeave ? AppColors.paidLeave : AppColors.primary;
 
     return InkWell(
       onTap: entry.isHoliday ? null : () => _openEditSheet(context),
@@ -54,7 +59,7 @@ class DayCell extends StatelessWidget {
           color: bg,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: hasInput ? AppColors.primary : AppColors.line,
+            color: hasInput ? accentColor : AppColors.line,
             width: hasInput ? 1.4 : 1,
           ),
         ),
@@ -91,7 +96,7 @@ class DayCell extends StatelessWidget {
                       vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColors.primary,
+                      color: accentColor,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -123,6 +128,36 @@ class DayCell extends StatelessWidget {
                   decoration: const BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            // Paid-leave indicator: small "有" tag in the bottom-left
+            // corner, so paid-leave days are recognizable at a glance
+            // even without opening the day.
+            if (isPaidLeave)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 3,
+                    vertical: 0.5,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: AppColors.paidLeave,
+                    borderRadius: BorderRadius.only(
+                      topRight: Radius.circular(5),
+                      bottomLeft: Radius.circular(9),
+                    ),
+                  ),
+                  child: const Text(
+                    '有',
+                    style: TextStyle(
+                      fontSize: 8,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      height: 1.2,
+                    ),
                   ),
                 ),
               ),
@@ -201,14 +236,24 @@ class _DayEditSheetState extends State<_DayEditSheet> {
             initialValue: _code.isEmpty ? null : _code,
             decoration: const InputDecoration(labelText: '記号（希望時間）'),
             hint: const Text('記号を選択'),
-            items: ShiftCode.codes
-                .map(
-                  (e) => DropdownMenuItem(
-                    value: e.key,
-                    child: Text(ShiftCode.labelFor(e.key, e.value)),
+            items: [
+              DropdownMenuItem(
+                value: ShiftCode.paidLeaveCode,
+                child: Text(
+                  '${ShiftCode.paidLeaveCode} (${ShiftCode.paidLeaveFullLabel})',
+                  style: const TextStyle(
+                    color: AppColors.paidLeave,
+                    fontWeight: FontWeight.bold,
                   ),
-                )
-                .toList(),
+                ),
+              ),
+              ...ShiftCode.codes.map(
+                (e) => DropdownMenuItem(
+                  value: e.key,
+                  child: Text(ShiftCode.labelFor(e.key, e.value)),
+                ),
+              ),
+            ],
             onChanged: (val) {
               setState(() {
                 _code = val ?? '';

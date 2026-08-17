@@ -20,6 +20,10 @@ class AppColors {
   static const Color sun = Color(0xFFC4275F);
   static const Color sat = Color(0xFF262425);
   static const Color success = Color(0xFF2A9D8F);
+  // Paid leave (有給) uses a light-blue accent instead of the usual pink,
+  // so it stands out clearly from normal work-shift entries at a glance.
+  static const Color paidLeave = Color(0xFF3FA9D6);
+  static const Color paidLeaveBg = Color(0xFFE3F3FA);
 }
 
 class AppTheme {

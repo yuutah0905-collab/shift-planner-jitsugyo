@@ -392,7 +392,8 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                               ),
                               const SizedBox(height: 6),
                               const Text(
-                                '記号（A〜Y）を選ぶと労働時間が自動で入ります',
+                                '記号（A〜Y）を選ぶと労働時間が自動で入ります。'
+                                '「有」は有給休暇の希望です（水色で表示されます）',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppColors.inkMute,

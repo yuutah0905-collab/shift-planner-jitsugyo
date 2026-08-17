@@ -34,4 +34,13 @@ class ShiftCode {
 
   static String labelFor(String code, double hours) =>
       '$code (${hours.toStringAsFixed(2)}h)';
+
+  /// Special "paid leave" symbol. Unlike A〜Y, this does not map to a
+  /// fixed number of work hours - it simply marks the day as a paid-leave
+  /// request. Shown with a distinct light-blue color instead of the usual
+  /// pink, and with a small "有" tag in the bottom-left of the day cell.
+  static const String paidLeaveCode = '有';
+  static const String paidLeaveFullLabel = '有給休暇';
+
+  static bool isPaidLeave(String code) => code == paidLeaveCode;
 }

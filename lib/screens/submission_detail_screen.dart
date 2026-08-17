@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -150,7 +151,30 @@ class SubmissionDetailScreen extends StatelessWidget {
                               // symbol or hours were actually entered.
                               // For memo-only days, show a neutral
                               // "メモのみ" badge instead of an empty " h".
-                              if (d.hours.isNotEmpty || d.code.isNotEmpty)
+                              // Paid-leave days get a distinct light-blue
+                              // badge with no "h" suffix (no fixed hours).
+                              if (ShiftCode.isPaidLeave(d.code))
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.paidLeave.withValues(
+                                      alpha: 0.15,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    ShiftCode.paidLeaveFullLabel,
+                                    style: TextStyle(
+                                      color: AppColors.paidLeave,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                )
+                              else if (d.hours.isNotEmpty || d.code.isNotEmpty)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 8,
