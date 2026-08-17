@@ -89,12 +89,6 @@ class DayCell extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   )
-                else if (isPaidLeave)
-                  // Paid-leave days show the "有" tag only once, in the
-                  // bottom-left corner (see Positioned widget below) - so
-                  // here we just reserve the same vertical space instead
-                  // of duplicating the badge in the center.
-                  const SizedBox(height: 16)
                 else if (hasInput)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -134,34 +128,6 @@ class DayCell extends StatelessWidget {
                   decoration: const BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            // Paid-leave indicator: "有" badge in the bottom-left corner,
-            // using the exact same pill shape (rounded rectangle) as the
-            // normal code badge shown for other symbols, just placed in
-            // the corner instead of the center - so it's visually
-            // consistent with how every other symbol is displayed.
-            if (isPaidLeave)
-              Positioned(
-                bottom: 2,
-                left: 2,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 1,
-                  ),
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    '有',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
                 ),
               ),
