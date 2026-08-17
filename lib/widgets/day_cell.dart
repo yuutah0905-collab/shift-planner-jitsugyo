@@ -137,30 +137,30 @@ class DayCell extends StatelessWidget {
                   ),
                 ),
               ),
-            // Paid-leave indicator: small round "有" badge in the
-            // bottom-left corner, so paid-leave days are recognizable at
-            // a glance even without opening the day. A plain circle (like
-            // the memo dot) keeps the shape clean instead of the
-            // previous asymmetric-corner tag, which looked misshapen.
+            // Paid-leave indicator: "有" badge in the bottom-left corner,
+            // using the exact same pill shape (rounded rectangle) as the
+            // normal code badge shown for other symbols, just placed in
+            // the corner instead of the center - so it's visually
+            // consistent with how every other symbol is displayed.
             if (isPaidLeave)
               Positioned(
-                bottom: 1,
-                left: 1,
+                bottom: 2,
+                left: 2,
                 child: Container(
-                  width: 14,
-                  height: 14,
-                  alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColors.paidLeave,
-                    shape: BoxShape.circle,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: const Text(
                     '有',
                     style: TextStyle(
-                      fontSize: 9,
+                      fontSize: 10,
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      height: 1,
                     ),
                   ),
                 ),
