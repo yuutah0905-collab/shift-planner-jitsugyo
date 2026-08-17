@@ -16,8 +16,14 @@ class SubmissionDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Show any day that has SOMETHING entered - a code/hours OR a memo.
+    // Previously this only checked hours/code, so days where staff only
+    // wrote a memo (no symbol) were silently hidden from the admin view.
     final filledDays = submission.days
-        .where((d) => d.hours.isNotEmpty || d.code.isNotEmpty)
+        .where(
+          (d) =>
+              d.hours.isNotEmpty || d.code.isNotEmpty || d.memo.isNotEmpty,
+        )
         .toList();
 
     return Scaffold(
@@ -140,26 +146,52 @@ class SubmissionDetailScreen extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(
-                                    alpha: 0.12,
+                              // Only show the code/hours badge when a
+                              // symbol or hours were actually entered.
+                              // For memo-only days, show a neutral
+                              // "メモのみ" badge instead of an empty " h".
+                              if (d.hours.isNotEmpty || d.code.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
                                   ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  '${d.code} ${d.hours}h',
-                                  style: const TextStyle(
-                                    color: AppColors.primaryDeep,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 12,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${d.code} ${d.hours}h',
+                                    style: const TextStyle(
+                                      color: AppColors.primaryDeep,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.success.withValues(
+                                      alpha: 0.12,
+                                    ),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'メモのみ',
+                                    style: TextStyle(
+                                      color: AppColors.success,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
-                              ),
                               if (d.memo.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 Expanded(

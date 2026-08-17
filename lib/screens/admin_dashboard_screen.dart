@@ -314,12 +314,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           '${s.department} ／ ${_fmtMonthJp(s.targetMonth)} ／ 合計 ${s.totalHours.toStringAsFixed(2)}h',
         ),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          Navigator.of(context).push(
+        onTap: () async {
+          // Wait for the detail screen to close (e.g. after a delete),
+          // then refresh the list so deleted/edited entries disappear
+          // immediately instead of requiring a manual "更新" tap.
+          await Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => SubmissionDetailScreen(submission: s),
             ),
           );
+          if (!mounted) return;
+          _filterMonth.isEmpty ? _loadAll() : _load();
         },
       ),
     );

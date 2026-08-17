@@ -204,7 +204,10 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
         totalHours: _totalHours,
       );
       await _firestoreService.submitShift(submission);
-      await _localStorage.clearState();
+      // NOTE: We intentionally do NOT clear local storage or rebuild the
+      // form here. Part-time staff need to be able to review exactly what
+      // they submitted, so the entered name/department/days/memo must
+      // remain visible on screen after a successful submission.
       if (mounted) {
         _showSuccessDialog();
       }
@@ -235,16 +238,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
             Text('送信完了'),
           ],
         ),
-        content: const Text('シフト希望が管理人に送信されました。\nご協力ありがとうございました！'),
+        content: const Text(
+          'シフト希望が管理人に送信されました。\n'
+          '入力内容はこのまま画面に残りますので、いつでも見返せます。\n'
+          'ご協力ありがとうございました！',
+        ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              setState(() {
-                _loading = true;
-              });
-              _init();
-            },
+            onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('閉じる'),
           ),
         ],
