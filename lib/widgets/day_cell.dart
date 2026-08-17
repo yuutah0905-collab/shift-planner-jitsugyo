@@ -89,6 +89,12 @@ class DayCell extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   )
+                else if (isPaidLeave)
+                  // Paid-leave days show the "有" tag only once, in the
+                  // bottom-left corner (see Positioned widget below) - so
+                  // here we just reserve the same vertical space instead
+                  // of duplicating the badge in the center.
+                  const SizedBox(height: 16)
                 else if (hasInput)
                   Container(
                     padding: const EdgeInsets.symmetric(
