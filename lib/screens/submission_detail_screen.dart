@@ -377,18 +377,6 @@ class _PreviousVersionTile extends StatelessWidget {
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-        leading: CircleAvatar(
-          radius: 14,
-          backgroundColor: Colors.orange.withValues(alpha: 0.15),
-          child: Text(
-            '$versionLabel',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: Colors.deepOrange,
-            ),
-          ),
-        ),
         title: Text(
           '$versionLabel回目の提出',
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),

@@ -453,16 +453,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return Card(
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-          child: Text(
-            s.name.isNotEmpty ? s.name[0] : '?',
-            style: const TextStyle(
-              color: AppColors.primaryDeep,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
         title: Row(
           children: [
             Flexible(
