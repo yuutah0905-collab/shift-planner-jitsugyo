@@ -136,13 +136,13 @@ class DayCell extends StatelessWidget {
                   ),
               ],
             ),
-            // Memo indicator: placed in the top-right corner so it stays
-            // visible even on small mobile screens (previously it was below
-            // the code badge and got clipped/hard to see on phones).
+            // Memo indicator: placed in the top-left corner (bulk-select
+            // mode uses the top-right corner for its checkbox, so this
+            // moves here to avoid overlapping with it).
             if (hasMemo)
               Positioned(
                 top: 0,
-                right: 0,
+                left: 0,
                 child: Container(
                   width: 7,
                   height: 7,
@@ -153,10 +153,12 @@ class DayCell extends StatelessWidget {
                 ),
               ),
             // Selection checkbox indicator shown only in bulk-select mode.
+            // Placed in the top-right corner so it no longer overlaps the
+            // day number, which is centered near the top of the cell.
             if (canSelect)
               Positioned(
                 top: 1,
-                left: 1,
+                right: 1,
                 child: Container(
                   width: 15,
                   height: 15,
