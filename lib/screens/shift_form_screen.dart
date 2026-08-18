@@ -799,18 +799,6 @@ class _NamePickerSheet extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final e = roster[index];
                         return ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: AppColors.primary.withValues(
-                              alpha: 0.15,
-                            ),
-                            child: Text(
-                              e.name.isNotEmpty ? e.name[0] : '?',
-                              style: const TextStyle(
-                                color: AppColors.primaryDeep,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
                           title: Text(e.name),
                           onTap: () => Navigator.of(context).pop(e.name),
                         );
