@@ -85,16 +85,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return '${parts[0]}年${int.parse(parts[1])}月';
   }
 
+  /// Fixed display order for department chips: すべて → 出庫 → 入庫 →
+  /// 小分け → 梱包 → その他, followed by any other department not in this
+  /// list (e.g. custom departments added later), in the order they were
+  /// configured/discovered.
+  static const List<String> _departmentOrder = ['出庫', '入庫', '小分け', '梱包', 'その他'];
+
   /// All department labels that should appear as filter chips:
   /// configured departments + any department actually used in the
-  /// submissions (in case old/unlisted department names exist).
+  /// submissions (in case old/unlisted department names exist), sorted
+  /// according to [_departmentOrder] rather than alphabetically.
   List<String> get _availableDepartments {
     final set = <String>{..._departments};
     for (final s in _submissions) {
       if (s.department.isNotEmpty) set.add(s.department);
     }
     final list = set.toList();
-    list.sort();
+    list.sort((a, b) {
+      final ia = _departmentOrder.indexOf(a);
+      final ib = _departmentOrder.indexOf(b);
+      if (ia == -1 && ib == -1) return a.compareTo(b);
+      if (ia == -1) return 1;
+      if (ib == -1) return -1;
+      return ia.compareTo(ib);
+    });
     return list;
   }
 
