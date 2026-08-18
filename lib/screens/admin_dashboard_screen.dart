@@ -98,13 +98,23 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   /// Registered employees who have NOT submitted a shift request for the
   /// currently filtered month. Only meaningful when a specific month is
   /// selected (i.e. not in "すべて表示" mode), matched by name+department.
+  ///
+  /// Names are normalized (whitespace removed, case-insensitive) before
+  /// comparison so that spacing differences between how the admin
+  /// registered the roster and how staff typed their own name when
+  /// submitting (e.g. "山田 太郎" vs "山田太郎") don't cause a false
+  /// "not submitted" result.
   List<Employee> get _unsubmittedEmployees {
     if (_filterMonth.isEmpty) return [];
     final submittedKeys = _submissions
-        .map((s) => '${s.name}|${s.department}')
+        .map((s) => '${Employee.normalizeName(s.name)}|${s.department}')
         .toSet();
     return _employees
-        .where((e) => !submittedKeys.contains('${e.name}|${e.department}'))
+        .where(
+          (e) => !submittedKeys.contains(
+            '${Employee.normalizeName(e.name)}|${e.department}',
+          ),
+        )
         .toList();
   }
 
@@ -420,10 +430,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             if (s.isResubmission) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 1,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),

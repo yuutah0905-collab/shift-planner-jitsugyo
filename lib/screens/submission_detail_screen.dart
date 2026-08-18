@@ -22,8 +22,7 @@ class SubmissionDetailScreen extends StatelessWidget {
     // wrote a memo (no symbol) were silently hidden from the admin view.
     final filledDays = submission.days
         .where(
-          (d) =>
-              d.hours.isNotEmpty || d.code.isNotEmpty || d.memo.isNotEmpty,
+          (d) => d.hours.isNotEmpty || d.code.isNotEmpty || d.memo.isNotEmpty,
         )
         .toList();
 
@@ -40,10 +39,7 @@ class SubmissionDetailScreen extends StatelessWidget {
             if (submission.isResubmission) ...[
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(20),
@@ -380,10 +376,7 @@ class _PreviousVersionTile extends StatelessWidget {
       ),
       child: ListTile(
         dense: true,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 2,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         leading: CircleAvatar(
           radius: 14,
           backgroundColor: Colors.orange.withValues(alpha: 0.15),

@@ -14,4 +14,15 @@ class Employee {
     name: map['name']?.toString() ?? '',
     department: map['department']?.toString() ?? '',
   );
+
+  /// Normalizes a name for "submitted vs not submitted" matching purposes.
+  /// Removes all whitespace (half-width and full-width spaces/tabs) and
+  /// lowercases the result, so that e.g. "山田 太郎" (with a space) and
+  /// "山田太郎" (without) are treated as the same person. This prevents
+  /// the unsubmitted-employee list from showing false positives just
+  /// because the admin roster and the staff's own submission used
+  /// slightly different spacing when typing the same name.
+  static String normalizeName(String name) {
+    return name.replaceAll(RegExp(r'[\s\u3000]+'), '').trim().toLowerCase();
+  }
 }

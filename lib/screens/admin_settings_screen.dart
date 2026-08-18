@@ -179,8 +179,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void _addEmployee() {
     final v = _empNameController.text.trim();
     if (v.isEmpty) return;
-    final dept = _empDept ?? (_departments.isNotEmpty ? _departments.first : '');
-    if (_employees.any((e) => e.name == v && e.department == dept)) {
+    final dept =
+        _empDept ?? (_departments.isNotEmpty ? _departments.first : '');
+    final normalizedV = Employee.normalizeName(v);
+    if (_employees.any(
+      (e) =>
+          Employee.normalizeName(e.name) == normalizedV && e.department == dept,
+    )) {
       _empNameController.clear();
       return;
     }
@@ -499,13 +504,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
-                  initialValue:
-                      _departments.contains(_empDept) ? _empDept : null,
+                  initialValue: _departments.contains(_empDept)
+                      ? _empDept
+                      : null,
                   decoration: const InputDecoration(labelText: '部署'),
                   items: _departments
-                      .map(
-                        (d) => DropdownMenuItem(value: d, child: Text(d)),
-                      )
+                      .map((d) => DropdownMenuItem(value: d, child: Text(d)))
                       .toList(),
                   onChanged: (v) => setState(() => _empDept = v),
                 ),

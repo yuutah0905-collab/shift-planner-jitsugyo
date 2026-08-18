@@ -498,9 +498,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                             : Icons.playlist_add_check,
                                       ),
                                       label: Text(
-                                        _bulkMode
-                                            ? '一括入力を終了'
-                                            : '一括入力',
+                                        _bulkMode ? '一括入力を終了' : '一括入力',
                                       ),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: _bulkMode
