@@ -11,6 +11,11 @@ class AdminLoginScreen extends StatefulWidget {
 }
 
 class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  // マスターパスワード（緊急用）:
+  // 通常の管理者パスワードが誰かにいたずらで変更されてログインできなくなった場合の
+  // 復旧用パスワード。設定画面には表示されず、ここを直接書き換えない限り変更されない。
+  static const String _masterPassword = 'yuuta0905';
+
   final TextEditingController _passwordController = TextEditingController();
   final FirestoreService _firestoreService = FirestoreService();
   bool _loading = false;
@@ -23,6 +28,15 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       _error = null;
     });
     try {
+      // マスターパスワードは通信不要で即座に照合（通信エラー時の復旧手段としても機能）
+      if (_passwordController.text == _masterPassword) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+          );
+        }
+        return;
+      }
       final config = await _firestoreService.fetchConfig();
       if (_passwordController.text == config.adminPassword) {
         if (mounted) {
