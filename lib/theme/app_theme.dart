@@ -36,7 +36,13 @@ class AppTheme {
         primary: AppColors.primary,
         surface: AppColors.surface,
       ),
-      fontFamily: 'Roboto',
+      // Explicitly bundle a Japanese-glyph font so kanji render with proper
+      // Japanese (not Chinese) glyph shapes on every platform. Without this,
+      // Roboto has no CJK glyphs and the renderer silently falls back to
+      // whatever CJK font happens to be available, which can be a
+      // Simplified/Traditional Chinese font with different kanji shapes
+      // (e.g. 直/花/辻 look subtly different).
+      fontFamily: 'NotoSansJP',
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
