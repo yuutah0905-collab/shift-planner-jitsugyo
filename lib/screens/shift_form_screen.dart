@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_config.dart';
 import '../models/day_entry.dart';
+import '../models/employee.dart';
 import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
 import '../services/firestore_service.dart';
@@ -164,6 +165,46 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   void _onDayChanged() {
     setState(() {});
     _saveLocal();
+  }
+
+  /// Employees registered (via admin settings) under the currently
+  /// selected department, in the order the admin added them.
+  List<Employee> get _employeesInSelectedDepartment {
+    if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
+      return [];
+    }
+    return _config!.employees
+        .where((e) => e.department == _selectedDepartment)
+        .toList();
+  }
+
+  /// Opens a bottom sheet listing registered employee names for the
+  /// selected department (in admin-registration order) so staff can tap
+  /// their own name instead of typing it. If the department hasn't been
+  /// selected yet, or the roster for it is empty (e.g. new hires not yet
+  /// registered), staff can just type their name in the field as before -
+  /// tapping "手入力する" or dismissing the sheet keeps the field editable.
+  Future<void> _openNamePicker() async {
+    if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
+      _showSnack('先に部署を選択すると、名前の一覧から選べます');
+      return;
+    }
+    final roster = _employeesInSelectedDepartment;
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _NamePickerSheet(
+        department: _selectedDepartment!,
+        roster: roster,
+      ),
+    );
+    if (picked != null && picked.isNotEmpty) {
+      setState(() => _nameController.text = picked);
+      _saveLocal();
+    }
   }
 
   void _toggleBulkMode() {
@@ -433,15 +474,6 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                 ),
                               ),
                               const SizedBox(height: 10),
-                              TextField(
-                                controller: _nameController,
-                                decoration: const InputDecoration(
-                                  labelText: '氏名',
-                                  hintText: '氏名を入力',
-                                ),
-                                onChanged: (_) => _saveLocal(),
-                              ),
-                              const SizedBox(height: 10),
                               DropdownButtonFormField<String>(
                                 initialValue: _selectedDepartment,
                                 decoration: const InputDecoration(
@@ -456,9 +488,28 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                     )
                                     .toList(),
                                 onChanged: (val) {
-                                  setState(() => _selectedDepartment = val);
+                                  setState(() {
+                                    _selectedDepartment = val;
+                                    // 部署を変えたら、前の部署の名簿から選んだ
+                                    // 氏名が混在しないよう手入力扱いのままにする
+                                    // （氏名自体はクリアしない＝入力し直す手間を防ぐ）
+                                  });
                                   _saveLocal();
                                 },
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _nameController,
+                                decoration: InputDecoration(
+                                  labelText: '氏名',
+                                  hintText: '氏名を入力、または一覧から選択',
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.people_alt_outlined),
+                                    tooltip: '名前を一覧から選ぶ',
+                                    onPressed: _openNamePicker,
+                                  ),
+                                ),
+                                onChanged: (_) => _saveLocal(),
                               ),
                               const SizedBox(height: 6),
                               const Text(
@@ -689,6 +740,99 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _nameController.dispose();
     _monthMemoController.dispose();
     super.dispose();
+  }
+}
+
+/// Bottom sheet that lists registered employee names for the currently
+/// selected department (in the order the admin registered them), so
+/// staff can tap their own name instead of typing it. If a name isn't
+/// in the list yet (e.g. a new hire not registered in time), staff can
+/// tap "手入力する" to close the sheet and type their name directly in
+/// the field - nothing is forced.
+class _NamePickerSheet extends StatelessWidget {
+  final String department;
+  final List<Employee> roster;
+
+  const _NamePickerSheet({required this.department, required this.roster});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 20, left: 20, right: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  '$department の氏名一覧から選択',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDeep,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: roster.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'この部署にはまだ名簿が登録されていません。\n'
+                        '下の欄にそのまま氏名を入力してください。',
+                        style: TextStyle(color: AppColors.inkMute),
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: roster.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final e = roster[index];
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: AppColors.primary.withValues(
+                              alpha: 0.15,
+                            ),
+                            child: Text(
+                              e.name.isNotEmpty ? e.name[0] : '?',
+                              style: const TextStyle(
+                                color: AppColors.primaryDeep,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          title: Text(e.name),
+                          onTap: () => Navigator.of(context).pop(e.name),
+                        );
+                      },
+                    ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('一覧にない場合は手入力する'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
