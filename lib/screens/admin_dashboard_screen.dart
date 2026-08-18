@@ -22,14 +22,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   String? _error;
   String _filterMonth = '';
 
-  /// '' means "すべての部署" (no filter)
+  /// '' means "すべての部署" (no filter). This single selection now drives
+  /// BOTH the submission list filter AND the unsubmitted-employee banner,
+  /// so choosing a department tab automatically shows that department's
+  /// unsubmitted staff without needing a separate selection.
   String _selectedDepartment = '';
-
-  /// Currently selected department tab within the unsubmitted-employee
-  /// banner. '' means "すべて" (all departments). Kept separate from
-  /// [_selectedDepartment] so switching the main submission-list filter
-  /// doesn't reset the unsubmitted tab and vice versa.
-  String _unsubmittedTabDept = '';
 
   @override
   void initState() {
@@ -124,24 +121,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         .toList();
   }
 
-  /// Unsubmitted employees, filtered by [_unsubmittedTabDept] ('' = all).
+  /// Unsubmitted employees, filtered by the shared [_selectedDepartment]
+  /// ('' = all departments).
   List<Employee> get _unsubmittedEmployeesForTab {
     final all = _unsubmittedEmployees;
-    if (_unsubmittedTabDept.isEmpty) return all;
-    return all.where((e) => e.department == _unsubmittedTabDept).toList();
+    if (_selectedDepartment.isEmpty) return all;
+    return all.where((e) => e.department == _selectedDepartment).toList();
   }
 
-  /// Department labels that should appear as tabs in the unsubmitted
-  /// banner: every department that has at least one registered employee,
-  /// sorted for stable ordering.
-  List<String> get _unsubmittedTabDepartments {
-    final set = <String>{};
-    for (final e in _employees) {
-      if (e.department.isNotEmpty) set.add(e.department);
-    }
-    final list = set.toList();
-    list.sort();
-    return list;
+  /// Registered employees belonging to the currently selected department
+  /// ('' = all employees). Used as the denominator in the unsubmitted
+  /// banner count when a department is selected.
+  List<Employee> get _employeesForSelectedDept {
+    if (_selectedDepartment.isEmpty) return _employees;
+    return _employees
+        .where((e) => e.department == _selectedDepartment)
+        .toList();
   }
 
   List<ShiftSubmission> get _filteredSubmissions {
@@ -280,8 +275,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Widget _buildUnsubmittedBanner() {
-    final unsubmitted = _unsubmittedEmployees;
-    if (unsubmitted.isEmpty) {
+    // Both the count and the roster shown here are scoped to whichever
+    // department is currently selected via the department chips below
+    // (_selectedDepartment). Selecting a department chip automatically
+    // updates this banner — no separate tab/selection needed inside it.
+    final scopeEmployees = _employeesForSelectedDept;
+    final unsubmittedInScope = _unsubmittedEmployeesForTab;
+    final deptLabel = _selectedDepartment.isEmpty
+        ? ''
+        : '（$_selectedDepartment）';
+    if (unsubmittedInScope.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
@@ -293,20 +296,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           children: [
             const Icon(Icons.check_circle, color: Colors.green, size: 20),
             const SizedBox(width: 8),
-            Text(
-              '全員提出済みです（${_employees.length}名）',
-              style: const TextStyle(
-                color: Colors.green,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            Expanded(
+              child: Text(
+                '全員提出済みです$deptLabel（${scopeEmployees.length}名）',
+                style: const TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],
         ),
       );
     }
-    final tabDepts = _unsubmittedTabDepartments;
-    final tabbed = _unsubmittedEmployeesForTab;
     return Card(
       color: Colors.red.withValues(alpha: 0.05),
       margin: EdgeInsets.zero,
@@ -322,7 +325,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           color: Colors.redAccent,
         ),
         title: Text(
-          '未提出者 ${unsubmitted.length}名 ／ ${_employees.length}名中',
+          '未提出者 ${unsubmittedInScope.length}名 ／ ${scopeEmployees.length}名中$deptLabel',
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             color: Colors.redAccent,
@@ -330,86 +333,34 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ),
         children: [
-          if (tabDepts.length > 1)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _unsubmittedTabChip('すべて', '', unsubmitted.length),
-                      ...tabDepts.map((d) {
-                        final count = unsubmitted
-                            .where((e) => e.department == d)
-                            .length;
-                        return Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: _unsubmittedTabChip(d, d, count),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           Align(
             alignment: Alignment.centerLeft,
-            child: tabbed.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 6),
-                    child: Text(
-                      'この部署の未提出者はいません',
-                      style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: unsubmittedInScope
+                  .map(
+                    (e) => Chip(
+                      label: Text(
+                        _selectedDepartment.isEmpty && e.department.isNotEmpty
+                            ? '${e.name}（${e.department}）'
+                            : e.name,
+                      ),
+                      backgroundColor: Colors.red.withValues(alpha: 0.08),
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      side: BorderSide(
+                        color: Colors.red.withValues(alpha: 0.3),
+                      ),
                     ),
                   )
-                : Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: tabbed
-                        .map(
-                          (e) => Chip(
-                            label: Text(
-                              _unsubmittedTabDept.isEmpty &&
-                                      e.department.isNotEmpty
-                                  ? '${e.name}（${e.department}）'
-                                  : e.name,
-                            ),
-                            backgroundColor: Colors.red.withValues(alpha: 0.08),
-                            labelStyle: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.redAccent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            side: BorderSide(
-                              color: Colors.red.withValues(alpha: 0.3),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                  ),
+                  .toList(),
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _unsubmittedTabChip(String label, String value, int count) {
-    final selected = _unsubmittedTabDept == value;
-    return ChoiceChip(
-      label: Text('$label ($count)'),
-      selected: selected,
-      onSelected: (_) => setState(() => _unsubmittedTabDept = value),
-      selectedColor: Colors.redAccent,
-      backgroundColor: Colors.white,
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : Colors.redAccent,
-        fontWeight: FontWeight.w600,
-        fontSize: 12,
-      ),
-      side: BorderSide(
-        color: selected ? Colors.redAccent : Colors.red.withValues(alpha: 0.4),
       ),
     );
   }
