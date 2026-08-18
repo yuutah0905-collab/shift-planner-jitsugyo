@@ -11,6 +11,14 @@ class ShiftSubmission {
   final double totalHours;
   final DateTime? submittedAt;
 
+  /// Older submissions from the SAME person + department + target month,
+  /// newest-first. This is populated client-side (by FirestoreService)
+  /// when grouping raw Firestore docs - it is never written back to
+  /// Firestore itself. Each entry in this list is a full historical
+  /// ShiftSubmission (its own Firestore doc), so it can still be viewed
+  /// or deleted individually via the normal detail screen.
+  final List<ShiftSubmission> previousVersions;
+
   ShiftSubmission({
     this.id,
     required this.name,
@@ -20,7 +28,14 @@ class ShiftSubmission {
     required this.days,
     required this.totalHours,
     this.submittedAt,
+    this.previousVersions = const [],
   });
+
+  /// Total number of times this person submitted for this month
+  /// (1 = first-time submission, 2+ = resubmitted).
+  int get submissionCount => previousVersions.length + 1;
+
+  bool get isResubmission => previousVersions.isNotEmpty;
 
   int get filledDaysCount =>
       days.where((d) => d.hours.isNotEmpty || d.code.isNotEmpty).length;

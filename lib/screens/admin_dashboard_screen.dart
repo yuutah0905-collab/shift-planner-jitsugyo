@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/employee.dart';
 import '../models/shift_submission.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
@@ -16,6 +17,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final FirestoreService _firestoreService = FirestoreService();
   List<ShiftSubmission> _submissions = [];
   List<String> _departments = [];
+  List<Employee> _employees = [];
   bool _loading = true;
   String? _error;
   String _filterMonth = '';
@@ -38,6 +40,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final config = await _firestoreService.fetchConfig();
       _filterMonth = config.targetMonth;
       _departments = config.departments;
+      _employees = config.employees;
       final list = await _firestoreService.fetchSubmissionsForMonth(
         _filterMonth,
       );
@@ -90,6 +93,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final list = set.toList();
     list.sort();
     return list;
+  }
+
+  /// Registered employees who have NOT submitted a shift request for the
+  /// currently filtered month. Only meaningful when a specific month is
+  /// selected (i.e. not in "すべて表示" mode), matched by name+department.
+  List<Employee> get _unsubmittedEmployees {
+    if (_filterMonth.isEmpty) return [];
+    final submittedKeys = _submissions
+        .map((s) => '${s.name}|${s.department}')
+        .toSet();
+    return _employees
+        .where((e) => !submittedKeys.contains('${e.name}|${e.department}'))
+        .toList();
   }
 
   List<ShiftSubmission> get _filteredSubmissions {
@@ -180,6 +196,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       ],
                     ),
                   ),
+                  if (_filterMonth.isNotEmpty && _employees.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                      child: _buildUnsubmittedBanner(),
+                    ),
                   if (_availableDepartments.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
@@ -218,6 +239,87 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+
+  Widget _buildUnsubmittedBanner() {
+    final unsubmitted = _unsubmittedEmployees;
+    if (unsubmitted.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.green, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              '全員提出済みです（${_employees.length}名）',
+              style: const TextStyle(
+                color: Colors.green,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Card(
+      color: Colors.red.withValues(alpha: 0.05),
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        leading: const Icon(
+          Icons.warning_amber_rounded,
+          color: Colors.redAccent,
+        ),
+        title: Text(
+          '未提出者 ${unsubmitted.length}名 ／ ${_employees.length}名中',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.redAccent,
+            fontSize: 13,
+          ),
+        ),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: unsubmitted
+                  .map(
+                    (e) => Chip(
+                      label: Text(
+                        e.department.isEmpty
+                            ? e.name
+                            : '${e.name}（${e.department}）',
+                      ),
+                      backgroundColor: Colors.red.withValues(alpha: 0.08),
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      side: BorderSide(
+                        color: Colors.red.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -306,9 +408,40 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ),
         ),
-        title: Text(
-          s.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                s.name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (s.isResubmission) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.6),
+                  ),
+                ),
+                child: Text(
+                  '再提出 ${s.submissionCount}回目',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.deepOrange,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         subtitle: Text(
           '${s.department} ／ ${_fmtMonthJp(s.targetMonth)} ／ 合計 ${s.totalHours.toStringAsFixed(2)}h',

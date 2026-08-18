@@ -10,7 +10,21 @@ class DayCell extends StatelessWidget {
   final DayEntry entry;
   final VoidCallback onChanged;
 
-  const DayCell({super.key, required this.entry, required this.onChanged});
+  /// When true, tapping the cell toggles selection (via [onSelectToggle])
+  /// instead of opening the normal edit sheet. Used by the "一括入力"
+  /// (bulk input) feature in ShiftFormScreen.
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelectToggle;
+
+  const DayCell({
+    super.key,
+    required this.entry,
+    required this.onChanged,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectToggle,
+  });
 
   Color _dowColor(String dow) {
     if (dow == '日') return AppColors.sun;
@@ -50,17 +64,24 @@ class DayCell extends StatelessWidget {
     }
 
     final accentColor = isPaidLeave ? AppColors.paidLeave : AppColors.primary;
+    final canSelect = selectionMode && !entry.isHoliday;
 
     return InkWell(
-      onTap: entry.isHoliday ? null : () => _openEditSheet(context),
+      onTap: entry.isHoliday
+          ? null
+          : selectionMode
+          ? onSelectToggle
+          : () => _openEditSheet(context),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         decoration: BoxDecoration(
-          color: bg,
+          color: selected ? AppColors.primary.withValues(alpha: 0.20) : bg,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: hasInput ? accentColor : AppColors.line,
-            width: hasInput ? 1.4 : 1,
+            color: selected
+                ? AppColors.primary
+                : (hasInput ? accentColor : AppColors.line),
+            width: selected ? 2 : (hasInput ? 1.4 : 1),
           ),
         ),
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -129,6 +150,24 @@ class DayCell extends StatelessWidget {
                     color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
+                ),
+              ),
+            // Selection checkbox indicator shown only in bulk-select mode.
+            if (canSelect)
+              Positioned(
+                top: 1,
+                left: 1,
+                child: Container(
+                  width: 15,
+                  height: 15,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.primary : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.primary, width: 1.3),
+                  ),
+                  child: selected
+                      ? const Icon(Icons.check, size: 11, color: Colors.white)
+                      : null,
                 ),
               ),
           ],

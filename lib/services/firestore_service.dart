@@ -28,7 +28,10 @@ class FirestoreService {
 
   /// Fetch all shift submissions for a given target month (admin view)
   /// Uses a simple query (no orderBy) then sorts in memory to avoid
-  /// composite index requirements.
+  /// composite index requirements. Multiple submissions from the same
+  /// person/department/month are grouped: only the newest is returned
+  /// at the top level, with older ones nested in `previousVersions` so
+  /// admins can see resubmission history without duplicate list rows.
   Future<List<ShiftSubmission>> fetchSubmissionsForMonth(
     String targetMonth,
   ) async {
@@ -41,15 +44,7 @@ class FirestoreService {
         .map((doc) => ShiftSubmission.fromMap(doc.id, doc.data()))
         .toList();
 
-    list.sort((a, b) {
-      final at = a.submittedAt;
-      final bt = b.submittedAt;
-      if (at == null && bt == null) return 0;
-      if (at == null) return 1;
-      if (bt == null) return -1;
-      return bt.compareTo(at); // newest first
-    });
-    return list;
+    return _groupByPerson(list);
   }
 
   /// Fetch all shift submissions (used when admin wants to see everything)
@@ -58,7 +53,19 @@ class FirestoreService {
     final list = querySnapshot.docs
         .map((doc) => ShiftSubmission.fromMap(doc.id, doc.data()))
         .toList();
-    list.sort((a, b) {
+
+    // Group per (name, department, targetMonth) so resubmissions across
+    // different months are NOT collapsed together, only same-month ones.
+    final Map<String, List<ShiftSubmission>> byKey = {};
+    for (final s in list) {
+      final key = '${s.name}|${s.department}|${s.targetMonth}';
+      byKey.putIfAbsent(key, () => []).add(s);
+    }
+    final result = <ShiftSubmission>[];
+    for (final group in byKey.values) {
+      result.addAll(_groupByPerson(group));
+    }
+    result.sort((a, b) {
       final at = a.submittedAt;
       final bt = b.submittedAt;
       if (at == null && bt == null) return 0;
@@ -66,7 +73,57 @@ class FirestoreService {
       if (bt == null) return -1;
       return bt.compareTo(at);
     });
-    return list;
+    return result;
+  }
+
+  /// Groups a flat list of submissions (already narrowed to a single
+  /// target month) by (name, department): keeps only the newest doc per
+  /// person at the top level, attaching any older docs as
+  /// `previousVersions` (newest-first) for resubmission history.
+  List<ShiftSubmission> _groupByPerson(List<ShiftSubmission> list) {
+    final sorted = [...list]
+      ..sort((a, b) {
+        final at = a.submittedAt;
+        final bt = b.submittedAt;
+        if (at == null && bt == null) return 0;
+        if (at == null) return 1;
+        if (bt == null) return -1;
+        return bt.compareTo(at); // newest first
+      });
+
+    final Map<String, List<ShiftSubmission>> byPerson = {};
+    for (final s in sorted) {
+      final key = '${s.name}|${s.department}';
+      byPerson.putIfAbsent(key, () => []).add(s);
+    }
+
+    final result = <ShiftSubmission>[];
+    for (final group in byPerson.values) {
+      final newest = group.first;
+      final older = group.length > 1 ? group.sublist(1) : <ShiftSubmission>[];
+      result.add(
+        ShiftSubmission(
+          id: newest.id,
+          name: newest.name,
+          department: newest.department,
+          targetMonth: newest.targetMonth,
+          monthMemo: newest.monthMemo,
+          days: newest.days,
+          totalHours: newest.totalHours,
+          submittedAt: newest.submittedAt,
+          previousVersions: older,
+        ),
+      );
+    }
+    result.sort((a, b) {
+      final at = a.submittedAt;
+      final bt = b.submittedAt;
+      if (at == null && bt == null) return 0;
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      return bt.compareTo(at);
+    });
+    return result;
   }
 
   Future<void> deleteSubmission(String id) async {
@@ -82,6 +139,7 @@ class FirestoreService {
       'notice': config.notice,
       'departments': config.departments,
       'adminPassword': config.adminPassword,
+      'employees': config.employees.map((e) => e.toMap()).toList(),
     }, SetOptions(merge: true));
   }
 }

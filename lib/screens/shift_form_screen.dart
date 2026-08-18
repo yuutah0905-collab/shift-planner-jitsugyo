@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_config.dart';
 import '../models/day_entry.dart';
+import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
 import '../services/firestore_service.dart';
 import '../services/local_storage_service.dart';
@@ -32,6 +33,11 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   Map<String, DayEntry> _days = {};
   bool _loading = true;
   bool _submitting = false;
+
+  // 一括入力（bulk input）モード: 有効化すると日付セルをタップして
+  // 複数選択でき、選択した日にまとめて同じ記号を適用できる。
+  bool _bulkMode = false;
+  final Set<String> _selectedDates = {};
 
   @override
   void initState() {
@@ -159,6 +165,58 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _saveLocal();
   }
 
+  void _toggleBulkMode() {
+    setState(() {
+      _bulkMode = !_bulkMode;
+      _selectedDates.clear();
+    });
+  }
+
+  void _toggleDateSelection(String date) {
+    setState(() {
+      if (_selectedDates.contains(date)) {
+        _selectedDates.remove(date);
+      } else {
+        _selectedDates.add(date);
+      }
+    });
+  }
+
+  Future<void> _openBulkApplySheet() async {
+    if (_selectedDates.isEmpty) {
+      _showSnack('日にちを1つ以上選択してください');
+      return;
+    }
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _BulkApplySheet(count: _selectedDates.length),
+    ).then((code) {
+      if (code == null) return; // cancelled
+      setState(() {
+        for (final date in _selectedDates) {
+          final entry = _days[date];
+          if (entry == null || entry.isHoliday) continue;
+          if (code == _bulkClearSentinel) {
+            entry.code = '';
+            entry.hours = '';
+          } else {
+            entry.code = code;
+            final h = ShiftCode.hoursForCode(code);
+            entry.hours = h != null ? h.toStringAsFixed(2) : '';
+          }
+        }
+        _bulkMode = false;
+        _selectedDates.clear();
+      });
+      _saveLocal();
+      _showSnack('一括で入力しました');
+    });
+  }
+
   double get _totalHours {
     double total = 0;
     for (final d in _days.values) {
@@ -180,6 +238,8 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     if (parts.length != 2) return ym;
     return '${parts[0]}年${int.parse(parts[1])}月';
   }
+
+  static const String _bulkClearSentinel = '__clear__';
 
   Future<void> _submit() async {
     if (_nameController.text.trim().isEmpty) {
@@ -427,6 +487,61 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                 holidayCount: _holidayCount,
                               ),
                               const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: _toggleBulkMode,
+                                      icon: Icon(
+                                        _bulkMode
+                                            ? Icons.close
+                                            : Icons.playlist_add_check,
+                                      ),
+                                      label: Text(
+                                        _bulkMode
+                                            ? '一括入力を終了'
+                                            : '一括入力',
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: _bulkMode
+                                            ? Colors.redAccent
+                                            : AppColors.primaryDeep,
+                                        side: BorderSide(
+                                          color: _bulkMode
+                                              ? Colors.redAccent
+                                              : AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_bulkMode) ...[
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        onPressed: _selectedDates.isEmpty
+                                            ? null
+                                            : _openBulkApplySheet,
+                                        icon: const Icon(Icons.check),
+                                        label: Text(
+                                          '${_selectedDates.length}日に適用',
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              if (_bulkMode)
+                                const Padding(
+                                  padding: EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    '一括で記号を入力したい日にちをタップして選択してください',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.inkMute,
+                                    ),
+                                  ),
+                                ),
+                              const SizedBox(height: 10),
                               // Weekday header row (日〜土), matching the
                               // admin settings calendar layout.
                               Row(
@@ -470,6 +585,12 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                   return DayCell(
                                     entry: entry,
                                     onChanged: _onDayChanged,
+                                    selectionMode: _bulkMode,
+                                    selected: _selectedDates.contains(
+                                      entry.date,
+                                    ),
+                                    onSelectToggle: () =>
+                                        _toggleDateSelection(entry.date),
                                   );
                                 },
                               ),
@@ -560,5 +681,104 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _nameController.dispose();
     _monthMemoController.dispose();
     super.dispose();
+  }
+}
+
+/// Bottom sheet used by the bulk-input feature: lets the admin/staff pick
+/// a single code (A~Y or 有) to apply to every currently-selected day at
+/// once, or clear the selected days entirely. Returns the chosen code
+/// string via Navigator.pop, or `_ShiftFormScreenState._bulkClearSentinel`
+/// when "選択日をクリア" is chosen, or null if dismissed without a choice.
+class _BulkApplySheet extends StatefulWidget {
+  final int count;
+
+  const _BulkApplySheet({required this.count});
+
+  @override
+  State<_BulkApplySheet> createState() => _BulkApplySheetState();
+}
+
+class _BulkApplySheetState extends State<_BulkApplySheet> {
+  String? _code;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '選択した${widget.count}日に一括で適用',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryDeep,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _code,
+            decoration: const InputDecoration(labelText: '記号（希望時間）'),
+            hint: const Text('記号を選択'),
+            items: [
+              DropdownMenuItem(
+                value: ShiftCode.paidLeaveCode,
+                child: Text(
+                  '${ShiftCode.paidLeaveCode} (${ShiftCode.paidLeaveFullLabel})',
+                  style: const TextStyle(
+                    color: AppColors.paidLeave,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              ...ShiftCode.codes.map(
+                (e) => DropdownMenuItem(
+                  value: e.key,
+                  child: Text(ShiftCode.labelFor(e.key, e.value)),
+                ),
+              ),
+            ],
+            onChanged: (val) => setState(() => _code = val),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.clear),
+              label: const Text('選択日の入力をクリア'),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(_ShiftFormScreenState._bulkClearSentinel),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _code == null
+                  ? null
+                  : () => Navigator.of(context).pop(_code),
+              child: const Text('適用'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

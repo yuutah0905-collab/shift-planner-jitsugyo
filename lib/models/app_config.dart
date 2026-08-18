@@ -1,3 +1,5 @@
+import 'employee.dart';
+
 /// Represents the app-wide configuration set by admin (app_settings/config)
 class AppConfig {
   final String targetMonth; // "YYYY-MM"
@@ -6,6 +8,10 @@ class AppConfig {
   final String notice;
   final List<String> departments;
   final String adminPassword;
+  // Registered employee roster (name + department), used to compute
+  // who has NOT yet submitted their shift request for the target month.
+  // Optional feature: if empty, the "未提出者" admin section is hidden.
+  final List<Employee> employees;
 
   AppConfig({
     required this.targetMonth,
@@ -14,6 +20,7 @@ class AppConfig {
     required this.notice,
     required this.departments,
     required this.adminPassword,
+    this.employees = const [],
   });
 
   factory AppConfig.fromMap(Map<String, dynamic> map) => AppConfig(
@@ -27,6 +34,9 @@ class AppConfig {
         .map((e) => e.toString())
         .toList(),
     adminPassword: map['adminPassword']?.toString() ?? '',
+    employees: (map['employees'] as List<dynamic>? ?? [])
+        .map((e) => Employee.fromMap(Map<String, dynamic>.from(e as Map)))
+        .toList(),
   );
 
   AppConfig copyWith({
@@ -36,6 +46,7 @@ class AppConfig {
     String? notice,
     List<String>? departments,
     String? adminPassword,
+    List<Employee>? employees,
   }) {
     return AppConfig(
       targetMonth: targetMonth ?? this.targetMonth,
@@ -44,6 +55,7 @@ class AppConfig {
       notice: notice ?? this.notice,
       departments: departments ?? this.departments,
       adminPassword: adminPassword ?? this.adminPassword,
+      employees: employees ?? this.employees,
     );
   }
 
@@ -61,6 +73,7 @@ class AppConfig {
       notice: '',
       departments: ['出庫', '入庫', '小分け', '梱包', 'その他'],
       adminPassword: 'shift2024',
+      employees: [],
     );
   }
 }

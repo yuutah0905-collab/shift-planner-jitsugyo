@@ -29,7 +29,37 @@ class SubmissionDetailScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${submission.name} さんの希望'),
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                '${submission.name} さんの希望',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (submission.isResubmission) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '再提出 ${submission.submissionCount}回目',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -237,6 +267,58 @@ class SubmissionDetailScreen extends StatelessWidget {
                 ),
               ),
             ),
+            if (submission.previousVersions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.history,
+                            size: 18,
+                            color: Colors.deepOrange,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '過去の提出履歴（${submission.previousVersions.length}件）',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.deepOrange,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'この方は同じ月に複数回シフト希望を送信しています。'
+                        '一番新しい内容が上に表示されている内容です。',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.inkMute,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ...submission.previousVersions.asMap().entries.map((
+                        entry,
+                      ) {
+                        final idx = entry.key;
+                        final old = entry.value;
+                        final versionLabel =
+                            submission.submissionCount - idx - 1;
+                        return _PreviousVersionTile(
+                          submission: old,
+                          versionLabel: versionLabel,
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -263,6 +345,74 @@ class SubmissionDetailScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A collapsible row summarizing one OLDER submission from the
+/// resubmission history. Tapping it navigates into a read-only detail
+/// view of that specific past submission (so admins can compare exactly
+/// what changed between versions).
+class _PreviousVersionTile extends StatelessWidget {
+  final ShiftSubmission submission;
+  final int versionLabel;
+
+  const _PreviousVersionTile({
+    required this.submission,
+    required this.versionLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final submittedAt = submission.submittedAt;
+    final dateLabel = submittedAt != null
+        ? '${submittedAt.toLocal().year}/${submittedAt.toLocal().month}/${submittedAt.toLocal().day} '
+              '${submittedAt.toLocal().hour.toString().padLeft(2, '0')}:${submittedAt.toLocal().minute.toString().padLeft(2, '0')}'
+        : '日時不明';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: AppColors.weekendBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 2,
+        ),
+        leading: CircleAvatar(
+          radius: 14,
+          backgroundColor: Colors.orange.withValues(alpha: 0.15),
+          child: Text(
+            '$versionLabel',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.deepOrange,
+            ),
+          ),
+        ),
+        title: Text(
+          '$versionLabel回目の提出',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        ),
+        subtitle: Text(
+          '$dateLabel ／ 入力 ${submission.filledDaysCount}日 ／ 合計 '
+          '${submission.totalHours.toStringAsFixed(2)}h',
+          style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+        ),
+        trailing: const Icon(Icons.chevron_right, size: 20),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => SubmissionDetailScreen(submission: submission),
+            ),
+          );
+        },
       ),
     );
   }

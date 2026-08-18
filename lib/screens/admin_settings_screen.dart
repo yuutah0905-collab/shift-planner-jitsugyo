@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/app_config.dart';
+import '../models/employee.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
@@ -15,6 +16,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final TextEditingController _noticeController = TextEditingController();
   final TextEditingController _deptInputController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _empNameController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -33,6 +35,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   List<String> _holidays = [];
   List<String> _departments = [];
+  List<Employee> _employees = [];
+  String? _empDept;
 
   static const List<String> _dow = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -47,6 +51,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _noticeController.dispose();
     _deptInputController.dispose();
     _passwordController.dispose();
+    _empNameController.dispose();
     super.dispose();
   }
 
@@ -78,6 +83,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       _passwordController.text = config.adminPassword;
       _holidays = List<String>.from(config.holidays);
       _departments = List<String>.from(config.departments);
+      _employees = List<Employee>.from(config.employees);
+      _empDept = _departments.isNotEmpty ? _departments.first : null;
       setState(() => _loading = false);
     } catch (e) {
       setState(() {
@@ -169,6 +176,24 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _departments.remove(v));
   }
 
+  void _addEmployee() {
+    final v = _empNameController.text.trim();
+    if (v.isEmpty) return;
+    final dept = _empDept ?? (_departments.isNotEmpty ? _departments.first : '');
+    if (_employees.any((e) => e.name == v && e.department == dept)) {
+      _empNameController.clear();
+      return;
+    }
+    setState(() {
+      _employees.add(Employee(name: v, department: dept));
+      _empNameController.clear();
+    });
+  }
+
+  void _removeEmployee(Employee e) {
+    setState(() => _employees.remove(e));
+  }
+
   int get _holidayCountThisCalMonth {
     final prefix =
         '${_calYear.toString().padLeft(4, '0')}-${_pad2(_calMonth)}-';
@@ -187,6 +212,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         adminPassword: _passwordController.text.trim().isEmpty
             ? 'shift2024'
             : _passwordController.text.trim(),
+        employees: _employees,
       );
       await _firestoreService.updateConfig(config);
       if (mounted) {
@@ -349,6 +375,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    title: '⑥ 従業員名簿（未提出者チェック用）',
+                    child: _buildEmployeeRoster(),
+                  ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
@@ -371,6 +402,126 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 ],
               ),
       ),
+    );
+  }
+
+  Widget _buildEmployeeRoster() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'ここに登録した人が「提出済みかどうか」の一覧チェック対象になります。',
+          style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+        ),
+        const SizedBox(height: 10),
+        if (_employees.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              'まだ従業員が登録されていません',
+              style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+          )
+        else
+          Column(
+            children: _employees
+                .map(
+                  (e) => Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.background,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            e.name,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (e.department.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              e.department,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.primaryDeep,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: Colors.redAccent,
+                          ),
+                          onPressed: () => _removeEmployee(e),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _empNameController,
+                decoration: const InputDecoration(
+                  labelText: '氏名を追加',
+                  hintText: '例：山田太郎',
+                ),
+                onSubmitted: (_) => _addEmployee(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_departments.isNotEmpty)
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  initialValue:
+                      _departments.contains(_empDept) ? _empDept : null,
+                  decoration: const InputDecoration(labelText: '部署'),
+                  items: _departments
+                      .map(
+                        (d) => DropdownMenuItem(value: d, child: Text(d)),
+                      )
+                      .toList(),
+                  onChanged: (v) => setState(() => _empDept = v),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _addEmployee,
+            icon: const Icon(Icons.person_add_alt_1),
+            label: const Text('従業員を追加'),
+          ),
+        ),
+      ],
     );
   }
 
