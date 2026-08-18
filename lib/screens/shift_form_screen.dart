@@ -10,6 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/day_cell.dart';
 import '../widgets/summary_card.dart';
 import 'admin_login_screen.dart';
+import 'help_screen.dart';
 
 const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 const List<String> _dowJpHeader = ['日', '月', '火', '水', '木', '金', '土'];
@@ -350,6 +351,15 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使い方ガイド',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HelpScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.admin_panel_settings_outlined),
             tooltip: '管理者',
