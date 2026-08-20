@@ -215,6 +215,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       // screens feel connected instead of resetting to
                       // "すべて" every time.
                       initialDepartment: _selectedDepartment,
+                      // Pass the registered employee roster so the
+                      // attendance list is sorted by registration order
+                      // (設定 > 従業員名簿) instead of alphabetically.
+                      employees: _employees,
                     ),
                   ),
                 );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/day_entry.dart';
+import '../models/employee.dart';
 import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
 import '../theme/app_theme.dart';
@@ -34,12 +35,21 @@ class DailyAttendanceScreen extends StatefulWidget {
   /// _selectedDepartment convention so the two screens stay in sync.
   final String initialDepartment;
 
+  /// Registered employee roster (in the order registered in 設定 >
+  /// 従業員名簿). Used to sort the attendance list by roster order
+  /// instead of alphabetically by name, so the list order matches the
+  /// staff list the admin is used to. Names not found in the roster
+  /// (e.g. someone who submitted but was removed from the roster) are
+  /// appended at the end in name order.
+  final List<Employee> employees;
+
   const DailyAttendanceScreen({
     super.key,
     required this.submissions,
     required this.targetMonth,
     required this.availableDepartments,
     this.initialDepartment = '',
+    this.employees = const [],
   });
 
   @override
@@ -58,6 +68,7 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
   @override
   void initState() {
     super.initState();
+    _buildRosterOrder();
     _selectedDepartment = widget.initialDepartment;
     final parts = widget.targetMonth.split('-');
     final year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? DateTime.now().year;
@@ -131,14 +142,36 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
     return result;
   }
 
+  /// Maps a normalized employee name to its registration order (index in
+  /// 設定 > 従業員名簿). Built once from widget.employees so the
+  /// attendance list can be sorted by roster order instead of
+  /// alphabetically - matching the order the admin registered staff in,
+  /// regardless of the order shifts happened to be submitted.
+  late Map<String, int> _rosterOrder;
+
+  void _buildRosterOrder() {
+    _rosterOrder = {};
+    for (int i = 0; i < widget.employees.length; i++) {
+      _rosterOrder[Employee.normalizeName(widget.employees[i].name)] = i;
+    }
+  }
+
   /// Same as above, but filtered to [_selectedDepartment] ('' = all),
-  /// sorted by name.
+  /// sorted by roster registration order (falling back to name order for
+  /// anyone not found in the roster, placed after all roster members).
   List<_DayAttendance> get _attendanceForSelectedDate {
     final all = _allAttendanceForSelectedDate;
     final filtered = _selectedDepartment.isEmpty
         ? all
         : all.where((a) => a.department == _selectedDepartment).toList();
-    filtered.sort((a, b) => a.name.compareTo(b.name));
+    filtered.sort((a, b) {
+      final orderA = _rosterOrder[Employee.normalizeName(a.name)];
+      final orderB = _rosterOrder[Employee.normalizeName(b.name)];
+      if (orderA != null && orderB != null) return orderA.compareTo(orderB);
+      if (orderA != null) return -1; // a is in roster, b is not -> a first
+      if (orderB != null) return 1; // b is in roster, a is not -> b first
+      return a.name.compareTo(b.name); // neither in roster -> name order
+    });
     return filtered;
   }
 
