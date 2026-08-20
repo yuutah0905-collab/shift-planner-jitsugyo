@@ -5,6 +5,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'submission_detail_screen.dart';
 import 'admin_settings_screen.dart';
+import 'daily_attendance_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -199,6 +200,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
+      floatingActionButton: _filterMonth.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DailyAttendanceScreen(
+                      submissions: _submissions,
+                      targetMonth: _filterMonth,
+                      departmentOrder: _departmentOrder,
+                    ),
+                  ),
+                );
+              },
+              backgroundColor: AppColors.primaryDeep,
+              icon: const Icon(Icons.today),
+              label: const Text('日別出勤状況'),
+            ),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())
