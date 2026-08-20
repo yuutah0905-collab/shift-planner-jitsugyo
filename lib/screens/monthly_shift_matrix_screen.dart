@@ -525,6 +525,15 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         // Fixed header row + scrollable data grid.
         Expanded(
           child: Column(
+            // IMPORTANT: Column's default crossAxisAlignment is `center`,
+            // which would shrink-wrap the header/body SingleChildScrollViews
+            // to exactly `tableWidth` and then center them - leaving a
+            // blank gap on both sides whenever `tableWidth` (shrunk day
+            // column width x day count) is narrower than the actual space
+            // available in this Expanded (e.g. on wide PC screens). Stretch
+            // forces both children to fill the full available width instead,
+            // so the table always starts flush against the name column.
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
                 height: _rowHeight,
