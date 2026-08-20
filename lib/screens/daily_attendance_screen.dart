@@ -11,7 +11,11 @@ class _DayAttendance {
   final String department;
   final DayEntry entry;
 
-  _DayAttendance({required this.name, required this.department, required this.entry});
+  _DayAttendance({
+    required this.name,
+    required this.department,
+    required this.entry,
+  });
 
   double get hours => double.tryParse(entry.hours) ?? 0.0;
   bool get isPaidLeave => ShiftCode.isPaidLeave(entry.code);
@@ -81,8 +85,10 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
       _selectedDepartment = '';
     }
     final parts = widget.targetMonth.split('-');
-    final year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? DateTime.now().year;
-    final month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? DateTime.now().month;
+    final year =
+        int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? DateTime.now().year;
+    final month =
+        int.tryParse(parts.length > 1 ? parts[1] : '') ?? DateTime.now().month;
     _firstDay = DateTime(year, month, 1);
     _lastDay = DateTime(year, month + 1, 0);
 
@@ -146,7 +152,9 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
       for (final d in s.days) {
         if (d.date != key) continue;
         if (d.hours.isEmpty && d.code.isEmpty) continue;
-        result.add(_DayAttendance(name: s.name, department: s.department, entry: d));
+        result.add(
+          _DayAttendance(name: s.name, department: s.department, entry: d),
+        );
       }
     }
     return result;
@@ -206,8 +214,12 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
   Widget build(BuildContext context) {
     final attendanceList = _attendanceForSelectedDate;
     final counts = _countByDepartment;
-    final canGoPrev = !_selectedDate.isBefore(_firstDay.add(const Duration(days: 1)));
-    final canGoNext = !_selectedDate.isAfter(_lastDay.subtract(const Duration(days: 1)));
+    final canGoPrev = !_selectedDate.isBefore(
+      _firstDay.add(const Duration(days: 1)),
+    );
+    final canGoNext = !_selectedDate.isAfter(
+      _lastDay.subtract(const Duration(days: 1)),
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('日別出勤状況')),
@@ -323,7 +335,11 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        for (int i = 0; i < widget.availableDepartments.length; i++)
+                        for (
+                          int i = 0;
+                          i < widget.availableDepartments.length;
+                          i++
+                        )
                           Padding(
                             padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
                             child: _deptTab(
@@ -361,9 +377,7 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                     )
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
-                      children: [
-                        _attendanceListCard(attendanceList),
-                      ],
+                      children: [_attendanceListCard(attendanceList)],
                     ),
             ),
           ],
@@ -393,7 +407,10 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
         const SizedBox(height: 2),
         Text(
           label,
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.85), fontSize: 11),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.85),
+            fontSize: 11,
+          ),
         ),
       ],
     );
@@ -439,81 +456,148 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
     );
   }
 
+  /// Shows the full memo text for a given attendee in a dialog, since the
+  /// memo icon in the list row is just an indicator (the text itself
+  /// doesn't fit inline). Includes the name/department/shift code as
+  /// context so the admin doesn't need to guess which entry it belongs to.
+  void _showMemoDialog(_DayAttendance a) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(
+              Icons.sticky_note_2_outlined,
+              color: AppColors.success,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                a.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              a.department.isNotEmpty
+                  ? '${a.department} ・ $_dateLabel'
+                  : _dateLabel,
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              a.entry.memo,
+              style: const TextStyle(fontSize: 14, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _attendanceRow(
     _DayAttendance a, {
     required bool isLast,
     bool showDepartment = false,
   }) {
     final accent = a.isPaidLeave ? AppColors.paidLeave : AppColors.primary;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-      decoration: BoxDecoration(
-        border: isLast
-            ? null
-            : const Border(bottom: BorderSide(color: AppColors.line, width: 0.6)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    a.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    final hasMemo = a.entry.memo.isNotEmpty;
+    return InkWell(
+      onTap: hasMemo ? () => _showMemoDialog(a) : null,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+        decoration: BoxDecoration(
+          border: isLast
+              ? null
+              : const Border(
+                  bottom: BorderSide(color: AppColors.line, width: 0.6),
                 ),
-                if (showDepartment && a.department.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '（${a.department}）',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.inkMute,
-                      fontWeight: FontWeight.w500,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      a.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
+                  if (showDepartment && a.department.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '（${a.department}）',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.inkMute,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ),
-          if (a.entry.memo.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.only(right: 6),
-              child: Icon(Icons.sticky_note_2_outlined, size: 15, color: AppColors.success),
-            ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: accent.withValues(alpha: 0.4)),
-            ),
-            child: Text(
-              a.isPaidLeave ? ShiftCode.paidLeaveCode : a.entry.code,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: a.isPaidLeave ? AppColors.paidLeave : AppColors.primaryDeep,
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 62,
-            child: Text(
-              '${a.hours.toStringAsFixed(2)}h',
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: AppColors.ink,
+            if (hasMemo)
+              const Padding(
+                padding: EdgeInsets.only(right: 6),
+                child: Icon(
+                  Icons.sticky_note_2_outlined,
+                  size: 15,
+                  color: AppColors.success,
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: accent.withValues(alpha: 0.4)),
+              ),
+              child: Text(
+                a.isPaidLeave ? ShiftCode.paidLeaveCode : a.entry.code,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: a.isPaidLeave
+                      ? AppColors.paidLeave
+                      : AppColors.primaryDeep,
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 62,
+              child: Text(
+                '${a.hours.toStringAsFixed(2)}h',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: AppColors.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
