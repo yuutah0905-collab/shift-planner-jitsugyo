@@ -244,6 +244,19 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _employees.remove(e));
   }
 
+  /// Reorders the roster when the admin drags a row to a new position.
+  /// This list order is what drives the "登録順" sorting used on the
+  /// 月間シフト一覧表 / 日別出勤状況 screens (see [_buildRosterOrder] in
+  /// those screens), so dragging here directly changes the display order
+  /// shown to the admin elsewhere once saved.
+  void _reorderEmployee(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex -= 1;
+      final item = _employees.removeAt(oldIndex);
+      _employees.insert(newIndex, item);
+    });
+  }
+
   /// Opens a dialog to view the current PIN (masked, revealable) and/or
   /// set a new 4-digit PIN for [employee]. Used both for initial PIN
   /// setup on existing rosters and for "PINを忘れた" resets.
@@ -556,7 +569,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         const Text(
           'ここに登録した人が「提出済みかどうか」の一覧チェック対象になります。\n'
           'PINを設定すると、その人が初めて名前を選ぶ端末で本人確認が入り、'
-          'なりすまし提出を防げます（PINは鍵アイコンから確認・変更できます）。',
+          'なりすまし提出を防げます（PINは鍵アイコンから確認・変更できます）。\n'
+          '右端の「☰」を長押し・ドラッグすると並び順を変更できます（月間シフト一覧表・'
+          '日別出勤状況の表示順に反映されます）。',
           style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
         ),
         const SizedBox(height: 10),
@@ -569,78 +584,92 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             ),
           )
         else
-          Column(
-            children: _employees
-                .map(
-                  (e) => Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            buildDefaultDragHandles: false,
+            onReorder: _reorderEmployee,
+            itemCount: _employees.length,
+            itemBuilder: (context, index) {
+              final e = _employees[index];
+              return Container(
+                key: ValueKey('${e.name}_${e.department}'),
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        e.name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
                     ),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            e.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                    if (e.department.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          e.department,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primaryDeep,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (e.department.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            margin: const EdgeInsets.only(right: 6),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              e.department,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppColors.primaryDeep,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        IconButton(
-                          icon: Icon(
-                            e.pin.isNotEmpty
-                                ? Icons.lock
-                                : Icons.lock_open_outlined,
-                            size: 18,
-                            color: e.pin.isNotEmpty
-                                ? AppColors.primaryDeep
-                                : AppColors.inkMute,
-                          ),
-                          tooltip: 'PINを確認・設定',
-                          onPressed: () => _editEmployeePin(e),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            size: 18,
-                            color: Colors.redAccent,
-                          ),
-                          onPressed: () => _removeEmployee(e),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                      ],
+                      ),
+                    IconButton(
+                      icon: Icon(
+                        e.pin.isNotEmpty
+                            ? Icons.lock
+                            : Icons.lock_open_outlined,
+                        size: 18,
+                        color: e.pin.isNotEmpty
+                            ? AppColors.primaryDeep
+                            : AppColors.inkMute,
+                      ),
+                      tooltip: 'PINを確認・設定',
+                      onPressed: () => _editEmployeePin(e),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                  ),
-                )
-                .toList(),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close,
+                        size: 18,
+                        color: Colors.redAccent,
+                      ),
+                      onPressed: () => _removeEmployee(e),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 6),
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: const Icon(
+                        Icons.drag_handle,
+                        size: 20,
+                        color: AppColors.inkMute,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
           ),
         const SizedBox(height: 6),
         Row(
