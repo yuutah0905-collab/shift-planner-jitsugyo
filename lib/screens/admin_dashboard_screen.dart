@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import 'submission_detail_screen.dart';
 import 'admin_settings_screen.dart';
 import 'daily_attendance_screen.dart';
+import 'monthly_shift_matrix_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -202,30 +203,64 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       ),
       floatingActionButton: _filterMonth.isEmpty
           ? null
-          : FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => DailyAttendanceScreen(
-                      submissions: _submissions,
-                      targetMonth: _filterMonth,
-                      availableDepartments: _availableDepartments,
-                      // Open showing whichever department tab the admin
-                      // currently has selected on this screen, so the two
-                      // screens feel connected instead of resetting to
-                      // "すべて" every time.
-                      initialDepartment: _selectedDepartment,
-                      // Pass the registered employee roster so the
-                      // attendance list is sorted by registration order
-                      // (設定 > 従業員名簿) instead of alphabetically.
-                      employees: _employees,
-                    ),
-                  ),
-                );
-              },
-              backgroundColor: AppColors.primaryDeep,
-              icon: const Icon(Icons.today),
-              label: const Text('日別出勤状況'),
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FloatingActionButton.extended(
+                  heroTag: 'monthlyMatrixFab',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => MonthlyShiftMatrixScreen(
+                          submissions: _submissions,
+                          targetMonth: _filterMonth,
+                          availableDepartments: _availableDepartments,
+                          // Open showing whichever department tab the admin
+                          // currently has selected on this screen, so the
+                          // two screens feel connected instead of resetting
+                          // to the first department every time.
+                          initialDepartment: _selectedDepartment,
+                          // Pass the registered employee roster so the
+                          // matrix rows are sorted by registration order
+                          // (設定 > 従業員名簿) instead of alphabetically.
+                          employees: _employees,
+                        ),
+                      ),
+                    );
+                  },
+                  backgroundColor: AppColors.primary,
+                  icon: const Icon(Icons.table_chart_outlined),
+                  label: const Text('月間シフト一覧表'),
+                ),
+                const SizedBox(height: 12),
+                FloatingActionButton.extended(
+                  heroTag: 'dailyAttendanceFab',
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DailyAttendanceScreen(
+                          submissions: _submissions,
+                          targetMonth: _filterMonth,
+                          availableDepartments: _availableDepartments,
+                          // Open showing whichever department tab the admin
+                          // currently has selected on this screen, so the two
+                          // screens feel connected instead of resetting to
+                          // "すべて" every time.
+                          initialDepartment: _selectedDepartment,
+                          // Pass the registered employee roster so the
+                          // attendance list is sorted by registration order
+                          // (設定 > 従業員名簿) instead of alphabetically.
+                          employees: _employees,
+                        ),
+                      ),
+                    );
+                  },
+                  backgroundColor: AppColors.primaryDeep,
+                  icon: const Icon(Icons.today),
+                  label: const Text('日別出勤状況'),
+                ),
+              ],
             ),
       body: SafeArea(
         child: _loading
@@ -430,7 +465,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget _buildGroupedList() {
     final grouped = _groupedByDepartment;
     return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
       children: [
         for (final entry in grouped.entries) ...[
           Padding(
@@ -470,7 +505,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildFlatList(List<ShiftSubmission> list) {
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
       itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, index) => _submissionCard(list[index]),
