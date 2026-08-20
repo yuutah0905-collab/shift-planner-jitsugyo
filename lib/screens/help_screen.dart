@@ -10,9 +10,7 @@ class HelpScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('使い方ガイド・ヘルプ'),
-      ),
+      appBar: AppBar(title: const Text('使い方ガイド・ヘルプ')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(14, 16, 14, 32),
@@ -25,22 +23,36 @@ class HelpScreen extends StatelessWidget {
               step: '1',
               title: '氏名・部署を入力する',
               body:
-                  '画面上部の「基本情報」で氏名と部署を選びます。同じ氏名・部署で送信すると、次回以降も同じ人として認識されます。',
+                  '画面上部の「基本情報」の名前欄をタップすると、名簿から自分の名前を選べます。同じ氏名・部署で送信すると、次回以降も同じ人として認識されます。',
             ),
             _HelpTile(
               step: '2',
-              title: '希望日をタップする',
+              title: '（初回のみ）本人確認のPINを入力する',
+              accentColor: AppColors.primaryDeep,
+              badge: _ColorBadge(
+                label: '🔒 初回のみ',
+                color: AppColors.primaryDeep,
+                bg: AppColors.primaryDeep.withValues(alpha: 0.1),
+              ),
               body:
-                  'カレンダーの入力したい日付をタップすると、記号（勤務コード）を選ぶ画面が開きます。',
+                  '名簿から名前を選んだときに、名前の横に🔒マークが付いている場合はPIN（4桁の確認番号）の入力が求められます。\n\n'
+                  '・自分になりすまして他の人が名前を選んで提出することを防ぐための機能です\n'
+                  '・正しいPINを入力すれば、その端末（今使っているスマホ・パソコン）では次回から二度と聞かれません\n'
+                  '・月が変わって新しいシフト希望を出すときも、同じ端末であればPINの再入力は不要です\n'
+                  '・PINが分からない場合は、管理者に確認してください（管理者側の設定画面で確認・再設定できます）',
             ),
             _HelpTile(
               step: '3',
-              title: '勤務コードを選ぶ',
-              body:
-                  '記号（A〜Y）を選ぶと、労働時間が自動で入力されます。時間やメモを追加で入力することもできます。',
+              title: '希望日をタップする',
+              body: 'カレンダーの入力したい日付をタップすると、記号（勤務コード）を選ぶ画面が開きます。',
             ),
             _HelpTile(
               step: '4',
+              title: '勤務コードを選ぶ',
+              body: '記号（A〜Y）を選ぶと、労働時間が自動で入力されます。時間やメモを追加で入力することもできます。',
+            ),
+            _HelpTile(
+              step: '5',
               title: '有給休暇を入力する',
               accentColor: AppColors.paidLeave,
               body:
@@ -52,7 +64,7 @@ class HelpScreen extends StatelessWidget {
               ),
             ),
             _HelpTile(
-              step: '5',
+              step: '6',
               title: '複数日をまとめて入力する（一括入力）',
               body:
                   '毎週同じ曜日は同じ勤務、というときに便利な機能です。\n\n'
@@ -62,7 +74,7 @@ class HelpScreen extends StatelessWidget {
                   '④ 開いたシートで記号（時間）を選び「適用」を押すと、選んだ日すべてに反映されます',
             ),
             _HelpTile(
-              step: '6',
+              step: '7',
               title: '入力が終わったら送信する',
               body:
                   '画面下部の「シフト送信」ボタンをタップして完了です。送信が成功すると「送信完了」というメッセージが表示されます。\n\n'
@@ -70,7 +82,10 @@ class HelpScreen extends StatelessWidget {
               warn: true,
             ),
             const SizedBox(height: 24),
-            const _SectionHeader(title: 'よくある質問（Q&A）', icon: Icons.help_outline),
+            const _SectionHeader(
+              title: 'よくある質問（Q&A）',
+              icon: Icons.help_outline,
+            ),
             const SizedBox(height: 8),
             const _FaqTile(
               question: '一度送信した後に、内容を間違えていたことに気づきました。',
@@ -91,6 +106,26 @@ class HelpScreen extends StatelessWidget {
               question: '入力した内容はどこかに保存されますか？',
               answer:
                   '入力内容は端末に自動的に保存され、アプリを閉じても消えません。次にアプリを開いたときも、続きから入力・確認ができます。',
+            ),
+            const _FaqTile(
+              question: '名前を選んだらPIN（4桁の番号）を聞かれました。何を入力すればいいですか？',
+              answer:
+                  '本人確認のための4桁のPINです。管理者が名簿にあなたの名前を登録した際に設定されています。PINが分からない場合は、管理者に確認してください（管理者側の設定画面で確認・再設定できます）。',
+            ),
+            const _FaqTile(
+              question: '毎回シフトを提出するたびにPINを入力しないといけませんか？',
+              answer:
+                  'いいえ。一度正しいPINを入力すると、その端末（今使っているスマホ・パソコン・ブラウザ）では確認済みとして記録され、次回からは聞かれません。月が変わって新しいシフト希望を出す場合も、同じ端末であれば再入力は不要です。',
+            ),
+            const _FaqTile(
+              question: '別のスマホやパソコンから提出したら、またPINを聞かれました。',
+              answer:
+                  'PINの確認は端末ごとに記録されるため、初めて使う端末（新しいスマホや別のパソコン、ブラウザのデータを消去した場合など）では、その端末で改めてPINの入力が必要になります。一度入力すれば、その端末では以降不要になります。',
+            ),
+            const _FaqTile(
+              question: '名前の横に🔒マークが付いていないのはなぜですか？',
+              answer:
+                  '🔒マークは管理者がその人にPINを設定している場合に表示されます。マークが付いていない場合はPINの入力なしで名前を選べます。',
             ),
           ],
         ),
@@ -229,11 +264,17 @@ class _HelpTile extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 18),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.orange,
+                      size: 18,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -256,7 +297,11 @@ class _ColorBadge extends StatelessWidget {
   final String label;
   final Color color;
   final Color bg;
-  const _ColorBadge({required this.label, required this.color, required this.bg});
+  const _ColorBadge({
+    required this.label,
+    required this.color,
+    required this.bg,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +338,11 @@ class _FaqTile extends StatelessWidget {
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
           childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          leading: const Icon(Icons.chat_bubble_outline, color: AppColors.primaryDeep, size: 20),
+          leading: const Icon(
+            Icons.chat_bubble_outline,
+            color: AppColors.primaryDeep,
+            size: 20,
+          ),
           title: Text(
             'Q. $question',
             style: const TextStyle(
