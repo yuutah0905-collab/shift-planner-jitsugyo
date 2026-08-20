@@ -6,13 +6,26 @@ class Employee {
   final String name;
   final String department;
 
-  Employee({required this.name, required this.department});
+  /// 4-digit PIN used to confirm identity the first time this person
+  /// selects their name on a new device (prevents someone else from
+  /// picking their name and submitting on their behalf). Empty string
+  /// means no PIN has been set yet by the admin - in that case staff can
+  /// select the name without a PIN prompt (backward-compatible grace
+  /// period until the admin sets one).
+  final String pin;
 
-  Map<String, dynamic> toMap() => {'name': name, 'department': department};
+  Employee({required this.name, required this.department, this.pin = ''});
+
+  Map<String, dynamic> toMap() => {
+    'name': name,
+    'department': department,
+    'pin': pin,
+  };
 
   factory Employee.fromMap(Map<String, dynamic> map) => Employee(
     name: map['name']?.toString() ?? '',
     department: map['department']?.toString() ?? '',
+    pin: map['pin']?.toString() ?? '',
   );
 
   /// Normalizes a name for "submitted vs not submitted" matching purposes.

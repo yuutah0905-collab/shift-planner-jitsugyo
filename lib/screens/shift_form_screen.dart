@@ -184,27 +184,57 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   /// selected yet, or the roster for it is empty (e.g. new hires not yet
   /// registered), staff can just type their name in the field as before -
   /// tapping "手入力する" or dismissing the sheet keeps the field editable.
+  ///
+  /// If the selected employee has a PIN set by the admin AND this device
+  /// hasn't verified that name before, a PIN prompt is shown first (see
+  /// _verifyPinFor). This is a one-time-per-device check, not a
+  /// per-session login - once verified, this device will never be asked
+  /// again for that name.
   Future<void> _openNamePicker() async {
     if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
       _showSnack('先に部署を選択すると、名前の一覧から選べます');
       return;
     }
     final roster = _employeesInSelectedDepartment;
-    final picked = await showModalBottomSheet<String>(
+    final picked = await showModalBottomSheet<Employee>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _NamePickerSheet(
-        department: _selectedDepartment!,
-        roster: roster,
-      ),
+      builder: (ctx) =>
+          _NamePickerSheet(department: _selectedDepartment!, roster: roster),
     );
-    if (picked != null && picked.isNotEmpty) {
-      setState(() => _nameController.text = picked);
-      _saveLocal();
+    if (picked == null || picked.name.isEmpty) return;
+
+    final ok = await _verifyPinFor(picked);
+    if (!ok) return;
+
+    setState(() => _nameController.text = picked.name);
+    _saveLocal();
+  }
+
+  /// Ensures the staff member selecting [employee]'s name is really them,
+  /// by checking a 4-digit PIN the admin set for that person - but only
+  /// the FIRST time this device selects that name. Returns true if it's
+  /// OK to proceed (no PIN set, already verified on this device, or PIN
+  /// just entered correctly); false if the user cancelled or entered the
+  /// wrong PIN.
+  Future<bool> _verifyPinFor(Employee employee) async {
+    if (employee.pin.isEmpty) return true; // no PIN set by admin yet
+    if (await _localStorage.isNameVerified(employee.name)) return true;
+    if (!mounted) return false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _PinEntryDialog(employee: employee),
+    );
+    if (result == true) {
+      await _localStorage.markNameVerified(employee.name);
+      return true;
     }
+    return false;
   }
 
   void _toggleBulkMode() {
@@ -291,6 +321,24 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     if (_selectedDepartment == null || _selectedDepartment!.isEmpty) {
       _showSnack('部署を選択してください');
       return;
+    }
+
+    // Safety net: even if the name was typed by hand (not picked from the
+    // roster list), if it matches a registered employee with a PIN set,
+    // still require PIN verification before submitting - otherwise
+    // someone could bypass the picker's PIN check by just typing the
+    // name themselves.
+    final typedName = _nameController.text.trim();
+    Employee? match;
+    for (final e in _employeesInSelectedDepartment) {
+      if (Employee.normalizeName(e.name) == Employee.normalizeName(typedName)) {
+        match = e;
+        break;
+      }
+    }
+    if (match != null) {
+      final ok = await _verifyPinFor(match);
+      if (!ok) return;
     }
 
     setState(() => _submitting = true);
@@ -396,9 +444,9 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
             icon: const Icon(Icons.help_outline),
             tooltip: '使い方ガイド',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HelpScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const HelpScreen()));
             },
           ),
           IconButton(
@@ -800,7 +848,14 @@ class _NamePickerSheet extends StatelessWidget {
                         final e = roster[index];
                         return ListTile(
                           title: Text(e.name),
-                          onTap: () => Navigator.of(context).pop(e.name),
+                          trailing: e.pin.isNotEmpty
+                              ? const Icon(
+                                  Icons.lock_outline,
+                                  size: 16,
+                                  color: AppColors.inkMute,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(context).pop(e),
                         );
                       },
                     ),
@@ -919,6 +974,101 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Dialog that asks the user to enter [employee]'s 4-digit PIN, shown only
+/// the first time this device selects that person's name (see
+/// _ShiftFormScreenState._verifyPinFor). Returns true via Navigator.pop if
+/// the correct PIN was entered, false/null otherwise. If the PIN is wrong,
+/// shows an inline error and lets the user retry without closing.
+class _PinEntryDialog extends StatefulWidget {
+  final Employee employee;
+
+  const _PinEntryDialog({required this.employee});
+
+  @override
+  State<_PinEntryDialog> createState() => _PinEntryDialogState();
+}
+
+class _PinEntryDialogState extends State<_PinEntryDialog> {
+  final TextEditingController _pinController = TextEditingController();
+  String? _error;
+
+  void _confirm() {
+    if (_pinController.text.trim() == widget.employee.pin) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() => _error = 'PINが正しくありません');
+    }
+  }
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Row(
+        children: [
+          const Icon(Icons.lock_outline, color: AppColors.primaryDeep),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${widget.employee.name} さんの確認',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '本人確認のため、4桁のPINを入力してください。\n'
+            '（この端末では次回から不要になります）',
+            style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pinController,
+            autofocus: true,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, letterSpacing: 8),
+            decoration: InputDecoration(
+              counterText: '',
+              hintText: '••••',
+              errorText: _error,
+              border: const OutlineInputBorder(),
+            ),
+            onChanged: (_) {
+              if (_error != null) setState(() => _error = null);
+            },
+            onSubmitted: (_) => _confirm(),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'PINが分からない場合は管理者にご確認ください。',
+            style: TextStyle(fontSize: 11, color: AppColors.inkMute),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('キャンセル'),
+        ),
+        ElevatedButton(onPressed: _confirm, child: const Text('確認')),
+      ],
     );
   }
 }

@@ -17,6 +17,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final TextEditingController _deptInputController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _empNameController = TextEditingController();
+  final TextEditingController _empPinController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -52,6 +53,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _deptInputController.dispose();
     _passwordController.dispose();
     _empNameController.dispose();
+    _empPinController.dispose();
     super.dispose();
   }
 
@@ -179,6 +181,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   void _addEmployee() {
     final v = _empNameController.text.trim();
     if (v.isEmpty) return;
+    final pin = _empPinController.text.trim();
+    if (pin.isNotEmpty && (pin.length != 4 || int.tryParse(pin) == null)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PINは4桁の数字で入力してください')));
+      return;
+    }
     final dept =
         _empDept ?? (_departments.isNotEmpty ? _departments.first : '');
     final normalizedV = Employee.normalizeName(v);
@@ -187,16 +196,99 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           Employee.normalizeName(e.name) == normalizedV && e.department == dept,
     )) {
       _empNameController.clear();
+      _empPinController.clear();
       return;
     }
     setState(() {
-      _employees.add(Employee(name: v, department: dept));
+      _employees.add(Employee(name: v, department: dept, pin: pin));
       _empNameController.clear();
+      _empPinController.clear();
     });
   }
 
   void _removeEmployee(Employee e) {
     setState(() => _employees.remove(e));
+  }
+
+  /// Opens a dialog to view the current PIN (masked, revealable) and/or
+  /// set a new 4-digit PIN for [employee]. Used both for initial PIN
+  /// setup on existing rosters and for "PINを忘れた" resets.
+  Future<void> _editEmployeePin(Employee employee) async {
+    final controller = TextEditingController(text: employee.pin);
+    bool obscure = employee.pin.isEmpty ? false : true;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Text('${employee.name} さんのPIN'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'パートさんが名前を初めて選ぶ際に入力する4桁の確認番号です。\n'
+                '本人がPINを忘れた場合は、ここで確認・再設定できます。',
+                style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                obscureText: obscure,
+                keyboardType: TextInputType.number,
+                maxLength: 4,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 22, letterSpacing: 6),
+                decoration: InputDecoration(
+                  counterText: '',
+                  hintText: '未設定',
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      obscure ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () => setDialogState(() => obscure = !obscure),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('キャンセル'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final v = controller.text.trim();
+                if (v.isNotEmpty &&
+                    (v.length != 4 || int.tryParse(v) == null)) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('PINは4桁の数字で入力してください')),
+                  );
+                  return;
+                }
+                Navigator.of(ctx).pop(v);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      final idx = _employees.indexOf(employee);
+      if (idx != -1) {
+        _employees[idx] = Employee(
+          name: employee.name,
+          department: employee.department,
+          pin: result,
+        );
+      }
+    });
   }
 
   int get _holidayCountThisCalMonth {
@@ -415,7 +507,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'ここに登録した人が「提出済みかどうか」の一覧チェック対象になります。',
+          'ここに登録した人が「提出済みかどうか」の一覧チェック対象になります。\n'
+          'PINを設定すると、その人が初めて名前を選ぶ端末で本人確認が入り、'
+          'なりすまし提出を防げます（PINは鍵アイコンから確認・変更できます）。',
           style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
         ),
         const SizedBox(height: 10),
@@ -470,6 +564,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                             ),
                           ),
                         IconButton(
+                          icon: Icon(
+                            e.pin.isNotEmpty
+                                ? Icons.lock
+                                : Icons.lock_open_outlined,
+                            size: 18,
+                            color: e.pin.isNotEmpty
+                                ? AppColors.primaryDeep
+                                : AppColors.inkMute,
+                          ),
+                          tooltip: 'PINを確認・設定',
+                          onPressed: () => _editEmployeePin(e),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 10),
+                        IconButton(
                           icon: const Icon(
                             Icons.close,
                             size: 18,
@@ -515,6 +625,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 ),
               ),
           ],
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _empPinController,
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          decoration: const InputDecoration(
+            labelText: 'PIN（任意・4桁）',
+            hintText: '例：1234（本人確認用。未入力ならPINなしで登録）',
+            counterText: '',
+          ),
+          onSubmitted: (_) => _addEmployee(),
         ),
         const SizedBox(height: 8),
         SizedBox(
