@@ -35,28 +35,102 @@
 
   <title>シフト希望 | JITSUGYO</title>
   <link rel="manifest" href="manifest.json">
-  <script>
-    // Force-clear any previously installed Flutter Web service worker and
-    // caches so users always get the latest build instead of a stale one.
-    // Without this, browsers can keep serving an old cached version of
-    // main.dart.js even after the server has a fresh build deployed.
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function (registrations) {
-        for (var i = 0; i < registrations.length; i++) {
-          registrations[i].unregister();
-        }
-      });
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #FFFFFF;
     }
-    if (window.caches && window.caches.keys) {
-      caches.keys().then(function (names) {
-        for (var i = 0; i < names.length; i++) {
-          caches.delete(names[i]);
-        }
-      });
+    #loading-splash {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #FFFFFF;
+      z-index: 9999;
+      transition: opacity 0.35s ease-out;
     }
-  </script>
+    #loading-splash.fade-out {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #loading-splash img {
+      width: 88px;
+      height: 88px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 6px 20px rgba(234, 95, 152, 0.25);
+    }
+    #loading-splash .spinner {
+      width: 34px;
+      height: 34px;
+      border: 4px solid rgba(234, 95, 152, 0.18);
+      border-top-color: #EA5F98;
+      border-radius: 50%;
+      animation: spin 0.85s linear infinite;
+      margin-bottom: 14px;
+    }
+    #loading-splash .loading-text {
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      color: #9AA0A6;
+      font-size: 14px;
+      letter-spacing: 0.02em;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
+  <div id="loading-splash">
+    <img src="icons/Icon-192.png" alt="シフト希望">
+    <div class="spinner"></div>
+    <div class="loading-text">読み込み中です…</div>
+  </div>
+
+  <script>
+    // Only clear old service worker caches when the build actually changed,
+    // instead of on every single visit. Forcing a full re-download on every
+    // load was making repeat visits just as slow as the very first visit.
+    (function () {
+      var CURRENT_BUILD = '__BUILD_TS__';
+      var STORAGE_KEY = 'jitsugyo_build_ts';
+      try {
+        var lastBuild = window.localStorage.getItem(STORAGE_KEY);
+        if (lastBuild !== CURRENT_BUILD) {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              for (var i = 0; i < registrations.length; i++) {
+                registrations[i].unregister();
+              }
+            });
+          }
+          if (window.caches && window.caches.keys) {
+            caches.keys().then(function (names) {
+              for (var i = 0; i < names.length; i++) {
+                caches.delete(names[i]);
+              }
+            });
+          }
+          window.localStorage.setItem(STORAGE_KEY, CURRENT_BUILD);
+        }
+      } catch (e) {
+        // localStorage unavailable (e.g. privacy mode) - fall back to no-op.
+      }
+    })();
+
+    // Hide the loading splash once Flutter has attached its first frame.
+    window.addEventListener('flutter-first-frame', function () {
+      var splash = document.getElementById('loading-splash');
+      if (splash) {
+        splash.classList.add('fade-out');
+        setTimeout(function () { splash.remove(); }, 400);
+      }
+    });
+  </script>
   <script src="flutter_bootstrap.js?v=__BUILD_TS__" async></script>
 </body>
 </html>
