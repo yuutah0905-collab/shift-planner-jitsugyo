@@ -200,6 +200,30 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   String _dateKey(int day) =>
       '${_year.toString().padLeft(4, '0')}-${_month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
 
+  /// Sum of hours worked by everyone (in the currently filtered
+  /// department) on [day] - shown as a "合計" footer row at the bottom of
+  /// the matrix, matching the paper shift table's per-day total row.
+  double _totalHoursForDay(List<_PersonRow> rows, int day) {
+    final key = _dateKey(day);
+    double total = 0;
+    for (final row in rows) {
+      final entry = row.entriesByDate[key];
+      if (entry == null) continue;
+      final h = double.tryParse(entry.hours);
+      if (h != null) total += h;
+    }
+    return total;
+  }
+
+  /// Grand total across the whole month, for the bottom-right corner of
+  /// the footer row (sum of every day's total = sum of every person's
+  /// total).
+  double _grandTotalHours(List<_PersonRow> rows) =>
+      rows.fold(0.0, (sum, r) => sum + r.totalHours);
+
+  int _grandTotalFilledDays(List<_PersonRow> rows) =>
+      rows.fold(0, (sum, r) => sum + r.filledDaysCount);
+
   void _showMemoDialog(_PersonRow row, DayEntry entry, int day) {
     showDialog(
       context: context,
@@ -287,11 +311,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                     color: AppColors.inkMute,
                   ),
                   const SizedBox(width: 4),
-                  Text(
-                    '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップでメモ確認',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.inkMute,
+                  Expanded(
+                    child: Text(
+                      '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップでメモ確認 ・ 最下部の「合計」行はその日の全員の合計時間',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.inkMute,
+                      ),
                     ),
                   ),
                 ],
@@ -405,6 +431,32 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                      // "合計" label row, aligned with the footer totals
+                      // row on the right side of the table.
+                      Container(
+                        height: _rowHeight,
+                        width: double.infinity,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        decoration: const BoxDecoration(
+                          color: AppColors.holidayBg,
+                          border: Border(
+                            right: BorderSide(color: AppColors.line),
+                            top: BorderSide(
+                              color: AppColors.primaryDeep,
+                              width: 1.4,
+                            ),
+                          ),
+                        ),
+                        child: const Text(
+                          '合計',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: AppColors.primaryDeep,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -449,6 +501,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         children: [
                           for (int i = 0; i < rows.length; i++)
                             _dataRow(rows[i], i.isEven),
+                          _totalRow(rows),
                         ],
                       ),
                     ),
@@ -558,6 +611,74 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Footer row shown at the very bottom of the matrix: for each date
+  /// column, the sum of everyone's hours on that day (matching the paper
+  /// shift table's "出勤パート人工時間" bottom row), plus the grand total
+  /// in the bottom-right corner.
+  Widget _totalRow(List<_PersonRow> rows) {
+    return Container(
+      height: _rowHeight,
+      decoration: const BoxDecoration(
+        color: AppColors.holidayBg,
+        border: Border(
+          top: BorderSide(color: AppColors.primaryDeep, width: 1.4),
+        ),
+      ),
+      child: Row(
+        children: [
+          for (int day = 1; day <= _daysInMonth; day++)
+            _totalDayCell(_totalHoursForDay(rows, day)),
+          Container(
+            width: _totalColWidth,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              border: Border(left: BorderSide(color: AppColors.line)),
+            ),
+            child: Text(
+              '${_grandTotalFilledDays(rows)}',
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: AppColors.primaryDeep,
+              ),
+            ),
+          ),
+          Container(
+            width: _totalColWidth,
+            alignment: Alignment.center,
+            child: Text(
+              _grandTotalHours(rows).toStringAsFixed(2),
+              style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+                color: AppColors.primaryDeep,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _totalDayCell(double hours) {
+    return Container(
+      width: _dayColWidth,
+      height: _rowHeight,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: AppColors.line, width: 0.4)),
+      ),
+      child: Text(
+        hours > 0 ? hours.toStringAsFixed(2) : '',
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 10,
+          color: AppColors.primaryDeep,
+        ),
       ),
     );
   }
