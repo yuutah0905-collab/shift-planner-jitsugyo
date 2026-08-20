@@ -16,21 +16,30 @@ class _DayAttendance {
   bool get isPaidLeave => ShiftCode.isPaidLeave(entry.code);
 }
 
-/// Admin screen: "今日、誰が出勤して合計何時間か" at a glance, grouped by
-/// department. Shows one date at a time (with prev/next day navigation
-/// and a date picker), so the admin can quickly check any day in the
-/// target month without hunting through each person's individual
+/// Admin screen: "今日、誰が出勤して合計何時間か" at a glance, filterable by
+/// department tab (linked to whichever department the admin had selected
+/// on the dashboard). Shows one date at a time (with prev/next day
+/// navigation and a date picker), so the admin can quickly check any day
+/// in the target month without hunting through each person's individual
 /// submission.
 class DailyAttendanceScreen extends StatefulWidget {
   final List<ShiftSubmission> submissions;
   final String targetMonth; // "YYYY-MM"
-  final List<String> departmentOrder;
+
+  /// Department tab labels in display order (already sorted by the
+  /// dashboard's fixed department order), NOT including "すべて".
+  final List<String> availableDepartments;
+
+  /// '' means "すべて" (all departments) - matches the dashboard's own
+  /// _selectedDepartment convention so the two screens stay in sync.
+  final String initialDepartment;
 
   const DailyAttendanceScreen({
     super.key,
     required this.submissions,
     required this.targetMonth,
-    required this.departmentOrder,
+    required this.availableDepartments,
+    this.initialDepartment = '',
   });
 
   @override
@@ -42,9 +51,14 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
   late DateTime _firstDay;
   late DateTime _lastDay;
 
+  /// '' = すべて（全部署）。Selecting a department tab filters the list to
+  /// just that department, mirroring the dashboard's own department tabs.
+  late String _selectedDepartment;
+
   @override
   void initState() {
     super.initState();
+    _selectedDepartment = widget.initialDepartment;
     final parts = widget.targetMonth.split('-');
     final year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? DateTime.now().year;
     final month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? DateTime.now().month;
@@ -103,8 +117,8 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
 
   /// All (name, department, entry) rows for the currently selected date,
   /// across every submission - only rows that actually have a code/hours
-  /// entered (not blank days) are included.
-  List<_DayAttendance> get _attendanceForSelectedDate {
+  /// entered (not blank days) are included. Not yet filtered by department.
+  List<_DayAttendance> get _allAttendanceForSelectedDate {
     final key = _dateKey;
     final result = <_DayAttendance>[];
     for (final s in widget.submissions) {
@@ -117,28 +131,27 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
     return result;
   }
 
-  /// Grouped by department, in the app's configured department order,
-  /// then sorted by name within each department.
-  Map<String, List<_DayAttendance>> get _groupedByDepartment {
-    final list = _attendanceForSelectedDate;
-    final Map<String, List<_DayAttendance>> map = {};
-    for (final a in list) {
-      final key = a.department.isEmpty ? '未設定' : a.department;
-      map.putIfAbsent(key, () => []).add(a);
+  /// Same as above, but filtered to [_selectedDepartment] ('' = all),
+  /// sorted by name.
+  List<_DayAttendance> get _attendanceForSelectedDate {
+    final all = _allAttendanceForSelectedDate;
+    final filtered = _selectedDepartment.isEmpty
+        ? all
+        : all.where((a) => a.department == _selectedDepartment).toList();
+    filtered.sort((a, b) => a.name.compareTo(b.name));
+    return filtered;
+  }
+
+  /// Count of attendees per department for the selected date, used as the
+  /// "(N)" badge on each department tab chip. Key '' represents the total
+  /// across all departments (すべて).
+  Map<String, int> get _countByDepartment {
+    final all = _allAttendanceForSelectedDate;
+    final map = <String, int>{'': all.length};
+    for (final d in widget.availableDepartments) {
+      map[d] = all.where((a) => a.department == d).length;
     }
-    for (final entries in map.values) {
-      entries.sort((a, b) => a.name.compareTo(b.name));
-    }
-    final keys = map.keys.toList();
-    keys.sort((a, b) {
-      final ia = widget.departmentOrder.indexOf(a);
-      final ib = widget.departmentOrder.indexOf(b);
-      if (ia == -1 && ib == -1) return a.compareTo(b);
-      if (ia == -1) return 1;
-      if (ib == -1) return -1;
-      return ia.compareTo(ib);
-    });
-    return {for (final k in keys) k: map[k]!};
+    return map;
   }
 
   double get _grandTotalHours =>
@@ -148,7 +161,8 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final grouped = _groupedByDepartment;
+    final attendanceList = _attendanceForSelectedDate;
+    final counts = _countByDepartment;
     final canGoPrev = !_selectedDate.isBefore(_firstDay.add(const Duration(days: 1)));
     final canGoNext = !_selectedDate.isAfter(_lastDay.subtract(const Duration(days: 1)));
 
@@ -251,8 +265,35 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                 ],
               ),
             ),
+            // Department tabs, linked to the dashboard's own department
+            // selection (initialDepartment) but independently switchable
+            // here so the admin can flip between departments without
+            // leaving this screen.
+            if (widget.availableDepartments.isNotEmpty)
+              Container(
+                color: AppColors.surface,
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _deptTab('すべて', '', counts[''] ?? 0),
+                        ...widget.availableDepartments.map(
+                          (d) => Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: _deptTab(d, d, counts[d] ?? 0),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            const Divider(height: 1),
             Expanded(
-              child: grouped.isEmpty
+              child: attendanceList.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -263,9 +304,11 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                             color: AppColors.inkMute.withValues(alpha: 0.5),
                           ),
                           const SizedBox(height: 12),
-                          const Text(
-                            'この日の出勤予定はありません',
-                            style: TextStyle(color: AppColors.inkMute),
+                          Text(
+                            _selectedDepartment.isEmpty
+                                ? 'この日の出勤予定はありません'
+                                : 'この日・この部署の出勤予定はありません',
+                            style: const TextStyle(color: AppColors.inkMute),
                           ),
                         ],
                       ),
@@ -273,11 +316,7 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
                       children: [
-                        for (final entry in grouped.entries)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: _departmentSection(entry.key, entry.value),
-                          ),
+                        _attendanceListCard(attendanceList),
                       ],
                     ),
             ),
@@ -314,8 +353,24 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
     );
   }
 
-  Widget _departmentSection(String department, List<_DayAttendance> list) {
-    final subtotal = list.fold(0.0, (sum, a) => sum + a.hours);
+  Widget _deptTab(String label, String value, int count) {
+    final selected = _selectedDepartment == value;
+    return ChoiceChip(
+      label: Text('$label ($count)'),
+      selected: selected,
+      onSelected: (_) => setState(() => _selectedDepartment = value),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.background,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : AppColors.ink,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+      ),
+      side: BorderSide(color: selected ? AppColors.primary : AppColors.line),
+    );
+  }
+
+  Widget _attendanceListCard(List<_DayAttendance> list) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -325,69 +380,24 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    department,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primaryDeep,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                Text(
-                  '${list.length}名',
-                  style: const TextStyle(
-                    color: AppColors.inkSoft,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryDeep,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${subtotal.toStringAsFixed(2)}h',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
           for (int i = 0; i < list.length; i++)
-            _attendanceRow(list[i], isLast: i == list.length - 1),
+            _attendanceRow(
+              list[i],
+              isLast: i == list.length - 1,
+              // Only show the department tag inline when viewing "すべて",
+              // since a single-department tab already makes it obvious.
+              showDepartment: _selectedDepartment.isEmpty,
+            ),
         ],
       ),
     );
   }
 
-  Widget _attendanceRow(_DayAttendance a, {required bool isLast}) {
+  Widget _attendanceRow(
+    _DayAttendance a, {
+    required bool isLast,
+    bool showDepartment = false,
+  }) {
     final accent = a.isPaidLeave ? AppColors.paidLeave : AppColors.primary;
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -399,10 +409,28 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              a.name,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    a.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (showDepartment && a.department.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    '（${a.department}）',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.inkMute,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
             ),
           ),
           if (a.entry.memo.isNotEmpty)

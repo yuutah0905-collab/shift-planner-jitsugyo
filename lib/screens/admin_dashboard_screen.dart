@@ -209,7 +209,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     builder: (_) => DailyAttendanceScreen(
                       submissions: _submissions,
                       targetMonth: _filterMonth,
-                      departmentOrder: _departmentOrder,
+                      availableDepartments: _availableDepartments,
+                      // Open showing whichever department tab the admin
+                      // currently has selected on this screen, so the two
+                      // screens feel connected instead of resetting to
+                      // "すべて" every time.
+                      initialDepartment: _selectedDepartment,
                     ),
                   ),
                 );
