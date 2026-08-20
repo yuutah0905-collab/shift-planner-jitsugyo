@@ -69,7 +69,17 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
   void initState() {
     super.initState();
     _buildRosterOrder();
-    _selectedDepartment = widget.initialDepartment;
+    // "すべて" tab has been removed - always land on a real department tab.
+    // Use initialDepartment if it's a valid department, otherwise fall
+    // back to the first available department.
+    if (widget.initialDepartment.isNotEmpty &&
+        widget.availableDepartments.contains(widget.initialDepartment)) {
+      _selectedDepartment = widget.initialDepartment;
+    } else if (widget.availableDepartments.isNotEmpty) {
+      _selectedDepartment = widget.availableDepartments.first;
+    } else {
+      _selectedDepartment = '';
+    }
     final parts = widget.targetMonth.split('-');
     final year = int.tryParse(parts.isNotEmpty ? parts[0] : '') ?? DateTime.now().year;
     final month = int.tryParse(parts.length > 1 ? parts[1] : '') ?? DateTime.now().month;
@@ -301,7 +311,8 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
             // Department tabs, linked to the dashboard's own department
             // selection (initialDepartment) but independently switchable
             // here so the admin can flip between departments without
-            // leaving this screen.
+            // leaving this screen. No "すべて" (all) tab - only real
+            // departments are shown, one of which is always selected.
             if (widget.availableDepartments.isNotEmpty)
               Container(
                 color: AppColors.surface,
@@ -312,13 +323,15 @@ class _DailyAttendanceScreenState extends State<DailyAttendanceScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _deptTab('すべて', '', counts[''] ?? 0),
-                        ...widget.availableDepartments.map(
-                          (d) => Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: _deptTab(d, d, counts[d] ?? 0),
+                        for (int i = 0; i < widget.availableDepartments.length; i++)
+                          Padding(
+                            padding: EdgeInsets.only(left: i == 0 ? 0 : 6),
+                            child: _deptTab(
+                              widget.availableDepartments[i],
+                              widget.availableDepartments[i],
+                              counts[widget.availableDepartments[i]] ?? 0,
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
