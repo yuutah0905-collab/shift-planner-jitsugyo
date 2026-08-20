@@ -75,10 +75,53 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
   static const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 
-  static const double _nameColWidth = 108;
-  static const double _dayColWidth = 40;
-  static const double _totalColWidth = 58;
-  static const double _rowHeight = 40;
+  // These start at their "roomy" defaults but are shrunk dynamically in
+  // [_computeAdaptiveSizes] (called from a LayoutBuilder in build()) so the
+  // whole month fits on screen with as little scrolling as possible, per
+  // the "一目で全体を見たい" request - while never going below a floor
+  // that would make the table unreadable/untappable.
+  double _nameColWidth = 92;
+  double _dayColWidth = 34;
+  double _totalColWidth = 46;
+  double _rowHeight = 34;
+  double _fontScale = 1.0;
+
+  /// Shrinks column widths / row height / font scale to fit the whole
+  /// matrix (all days x all rows) inside [constraints] whenever possible,
+  /// clamped to a minimum readable/tappable size. When the content still
+  /// doesn't fit (e.g. very large staff count on a narrow phone), the
+  /// minimum sizes are used and the remainder is reached via scrolling.
+  void _computeAdaptiveSizes(BoxConstraints constraints, int rowCount) {
+    // +2 = the fixed header row + the "合計" footer row.
+    final totalRowSlots = rowCount + 2;
+    final newRowHeight = (constraints.maxHeight / totalRowSlots).clamp(
+      22.0,
+      34.0,
+    );
+
+    final newNameColWidth = (constraints.maxWidth * 0.14).clamp(60.0, 92.0);
+    final newTotalColWidth = (constraints.maxWidth * 0.07).clamp(32.0, 46.0);
+    final remaining =
+        constraints.maxWidth - newNameColWidth - newTotalColWidth * 2;
+    final newDayColWidth = (remaining / _daysInMonth).clamp(20.0, 34.0);
+
+    final heightRatio = newRowHeight / 34.0;
+    final widthRatio = newDayColWidth / 34.0;
+    final rawScale = heightRatio < widthRatio ? heightRatio : widthRatio;
+    final newFontScale = rawScale.clamp(0.65, 1.0);
+
+    if (_rowHeight != newRowHeight ||
+        _nameColWidth != newNameColWidth ||
+        _totalColWidth != newTotalColWidth ||
+        _dayColWidth != newDayColWidth ||
+        _fontScale != newFontScale) {
+      _rowHeight = newRowHeight;
+      _nameColWidth = newNameColWidth;
+      _totalColWidth = newTotalColWidth;
+      _dayColWidth = newDayColWidth;
+      _fontScale = newFontScale;
+    }
+  }
 
   @override
   void initState() {
@@ -343,7 +386,12 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         ],
                       ),
                     )
-                  : _buildMatrix(rows),
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        _computeAdaptiveSizes(constraints, rows.length);
+                        return _buildMatrix(rows);
+                      },
+                    ),
             ),
           ],
         ),
@@ -385,17 +433,17 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               Container(
                 height: _rowHeight,
                 alignment: Alignment.centerLeft,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: const BoxDecoration(
                   color: AppColors.primaryDeep,
                   border: Border(right: BorderSide(color: Colors.white24)),
                 ),
-                child: const Text(
+                child: Text(
                   '氏名',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    fontSize: 12 * _fontScale,
                   ),
                 ),
               ),
@@ -409,7 +457,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                           height: _rowHeight,
                           width: double.infinity,
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
                             color: i.isEven
                                 ? AppColors.surface
@@ -424,9 +472,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                           ),
                           child: Text(
                             rows[i].name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              fontSize: 12,
+                              fontSize: 12 * _fontScale,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -437,7 +485,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         height: _rowHeight,
                         width: double.infinity,
                         alignment: Alignment.centerLeft,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                         decoration: const BoxDecoration(
                           color: AppColors.holidayBg,
                           border: Border(
@@ -448,11 +496,11 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                             ),
                           ),
                         ),
-                        child: const Text(
+                        child: Text(
                           '合計',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                            fontSize: 12 * _fontScale,
                             color: AppColors.primaryDeep,
                           ),
                         ),
@@ -532,10 +580,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         children: [
           Text(
             '$day',
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 12 * _fontScale,
             ),
           ),
           Text(
@@ -546,7 +594,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   : dow == 6
                   ? Colors.lightBlueAccent.shade100
                   : Colors.white70,
-              fontSize: 9,
+              fontSize: 9 * _fontScale,
             ),
           ),
         ],
@@ -565,10 +613,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
           fontWeight: FontWeight.bold,
-          fontSize: 10,
+          fontSize: 10 * _fontScale,
         ),
       ),
     );
@@ -595,7 +643,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             ),
             child: Text(
               '${row.filledDaysCount}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12 * _fontScale,
+              ),
             ),
           ),
           Container(
@@ -603,9 +654,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             alignment: Alignment.center,
             child: Text(
               row.totalHours.toStringAsFixed(2),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 11,
+                fontSize: 11 * _fontScale,
                 color: AppColors.primaryDeep,
               ),
             ),
@@ -640,9 +691,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             ),
             child: Text(
               '${_grandTotalFilledDays(rows)}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontSize: 12 * _fontScale,
                 color: AppColors.primaryDeep,
               ),
             ),
@@ -652,9 +703,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             alignment: Alignment.center,
             child: Text(
               _grandTotalHours(rows).toStringAsFixed(2),
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 11,
+                fontSize: 11 * _fontScale,
                 color: AppColors.primaryDeep,
               ),
             ),
@@ -674,9 +725,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       ),
       child: Text(
         hours > 0 ? hours.toStringAsFixed(2) : '',
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.bold,
-          fontSize: 10,
+          fontSize: 10 * _fontScale,
           color: AppColors.primaryDeep,
         ),
       ),
@@ -728,17 +779,21 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               isPaidLeave ? ShiftCode.paidLeaveCode : entry.code,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontSize: 12 * _fontScale,
                 color: isPaidLeave
                     ? AppColors.paidLeave
                     : AppColors.primaryDeep,
               ),
             ),
             if (hasMemo)
-              const Positioned(
+              Positioned(
                 top: 2,
                 right: 2,
-                child: Icon(Icons.circle, size: 5, color: AppColors.success),
+                child: Icon(
+                  Icons.circle,
+                  size: 5 * _fontScale,
+                  color: AppColors.success,
+                ),
               ),
           ],
         ),
