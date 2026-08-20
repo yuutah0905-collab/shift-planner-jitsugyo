@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/app_config.dart';
 import '../models/employee.dart';
@@ -17,7 +18,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final TextEditingController _deptInputController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _empNameController = TextEditingController();
-  final TextEditingController _empPinController = TextEditingController();
 
   bool _loading = true;
   bool _saving = false;
@@ -53,7 +53,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _deptInputController.dispose();
     _passwordController.dispose();
     _empNameController.dispose();
-    _empPinController.dispose();
     super.dispose();
   }
 
@@ -86,8 +85,36 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       _holidays = List<String>.from(config.holidays);
       _departments = List<String>.from(config.departments);
       _employees = List<Employee>.from(config.employees);
+      // 既存メンバーでPINが未設定の人には、考える手間をなくすため
+      // 自動でランダムな4桁PINを割り当てる（保存を押すまでは確定しない）。
+      final missing = _employees.where((e) => e.pin.isEmpty).length;
+      if (missing > 0) {
+        _employees = _employees
+            .map(
+              (e) => e.pin.isEmpty
+                  ? Employee(
+                      name: e.name,
+                      department: e.department,
+                      pin: _generateRandomPin(),
+                    )
+                  : e,
+            )
+            .toList();
+      }
       _empDept = _departments.isNotEmpty ? _departments.first : null;
       setState(() => _loading = false);
+      if (missing > 0 && mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'PIN未設定だった$missing名に自動でランダムなPINを設定しました。保存すると確定します。',
+              ),
+            ),
+          );
+        });
+      }
     } catch (e) {
       setState(() {
         _error = '設定の取得に失敗しました';
@@ -178,16 +205,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _departments.remove(v));
   }
 
+  /// ランダムな4桁PIN（0000〜9999）を生成する。既存の従業員PINと重複しないよう
+  /// になるべく配慮するが、万一重複しても本人名で識別するため実害はない。
+  String _generateRandomPin() {
+    final rnd = Random();
+    String pin;
+    var attempts = 0;
+    do {
+      pin = rnd.nextInt(10000).toString().padLeft(4, '0');
+      attempts++;
+    } while (_employees.any((e) => e.pin == pin) && attempts < 20);
+    return pin;
+  }
+
   void _addEmployee() {
     final v = _empNameController.text.trim();
     if (v.isEmpty) return;
-    final pin = _empPinController.text.trim();
-    if (pin.isNotEmpty && (pin.length != 4 || int.tryParse(pin) == null)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('PINは4桁の数字で入力してください')));
-      return;
-    }
     final dept =
         _empDept ?? (_departments.isNotEmpty ? _departments.first : '');
     final normalizedV = Employee.normalizeName(v);
@@ -196,13 +229,14 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           Employee.normalizeName(e.name) == normalizedV && e.department == dept,
     )) {
       _empNameController.clear();
-      _empPinController.clear();
       return;
     }
     setState(() {
-      _employees.add(Employee(name: v, department: dept, pin: pin));
+      // 追加時に自動でランダムPINを割り当てる（管理者が個別に考える必要をなくす）。
+      _employees.add(
+        Employee(name: v, department: dept, pin: _generateRandomPin()),
+      );
       _empNameController.clear();
-      _empPinController.clear();
     });
   }
 
@@ -251,6 +285,19 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     ),
                     onPressed: () => setDialogState(() => obscure = !obscure),
                   ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () {
+                    final newPin = _generateRandomPin();
+                    controller.text = newPin;
+                    setDialogState(() => obscure = false);
+                  },
+                  icon: const Icon(Icons.casino_outlined, size: 16),
+                  label: const Text('ランダムに再生成'),
                 ),
               ),
             ],
@@ -626,17 +673,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               ),
           ],
         ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: _empPinController,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          decoration: const InputDecoration(
-            labelText: 'PIN（任意・4桁）',
-            hintText: '例：1234（本人確認用。未入力ならPINなしで登録）',
-            counterText: '',
-          ),
-          onSubmitted: (_) => _addEmployee(),
+        const SizedBox(height: 4),
+        const Text(
+          '※ PINは追加時に自動でランダムな4桁が割り当てられます（鍵アイコンから確認・変更できます）。',
+          style: TextStyle(fontSize: 11, color: AppColors.inkMute),
         ),
         const SizedBox(height: 8),
         SizedBox(
