@@ -91,19 +91,29 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// clamped to a minimum readable/tappable size. When the content still
   /// doesn't fit (e.g. very large staff count on a narrow phone), the
   /// minimum sizes are used and the remainder is reached via scrolling.
+  ///
+  /// Row height is deliberately kept close to the day-column width (not
+  /// simply "whatever vertical space is available") so each day cell
+  /// reads as a near-square instead of a tall rectangle with a lot of
+  /// empty padding above/below the single-character code/number - even
+  /// when there are few staff rows and plenty of unused vertical space.
   void _computeAdaptiveSizes(BoxConstraints constraints, int rowCount) {
-    // +2 = the fixed header row + the "合計" footer row.
-    final totalRowSlots = rowCount + 2;
-    final newRowHeight = (constraints.maxHeight / totalRowSlots).clamp(
-      22.0,
-      34.0,
-    );
-
     final newNameColWidth = (constraints.maxWidth * 0.14).clamp(60.0, 92.0);
     final newTotalColWidth = (constraints.maxWidth * 0.07).clamp(32.0, 46.0);
     final remaining =
         constraints.maxWidth - newNameColWidth - newTotalColWidth * 2;
     final newDayColWidth = (remaining / _daysInMonth).clamp(20.0, 34.0);
+
+    // +2 = the fixed header row + the "合計" footer row.
+    final totalRowSlots = rowCount + 2;
+    final availableRowHeight = constraints.maxHeight / totalRowSlots;
+    // A little taller than the day column width reads better for Japanese
+    // text + borders, but never let it balloon past that just because
+    // there happens to be spare vertical space on screen.
+    final squareTarget = newDayColWidth * 1.1;
+    final newRowHeight =
+        (availableRowHeight < squareTarget ? availableRowHeight : squareTarget)
+            .clamp(20.0, 34.0);
 
     final heightRatio = newRowHeight / 34.0;
     final widthRatio = newDayColWidth / 34.0;
