@@ -102,23 +102,41 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final newTotalColWidth = (constraints.maxWidth * 0.07).clamp(32.0, 46.0);
     final remaining =
         constraints.maxWidth - newNameColWidth - newTotalColWidth * 2;
-    final newDayColWidth = (remaining / _daysInMonth).clamp(20.0, 34.0);
+    // IMPORTANT: no upper bound here. Capping this at a fixed max (as a
+    // previous version did) meant that on wide PC screens the day columns
+    // would stop growing while `remaining` kept growing with the window -
+    // leaving an ever-larger strip of literally unused width in the
+    // scrollable data grid (visually reported as "a gap between the name
+    // column and the dates", worse the bigger the screen/window). Letting
+    // the day columns freely grow to consume 100% of `remaining` guarantees
+    // the table always exactly fills the available width with zero blank
+    // space, on any screen size. Only a floor is kept, so cells never
+    // shrink below a tappable/readable size on narrow phones.
+    final newDayColWidth = (remaining / _daysInMonth).clamp(20.0, double.infinity);
 
     // +2 = the fixed header row + the "合計" footer row.
     final totalRowSlots = rowCount + 2;
     final availableRowHeight = constraints.maxHeight / totalRowSlots;
     // A little taller than the day column width reads better for Japanese
-    // text + borders, but never let it balloon past that just because
-    // there happens to be spare vertical space on screen.
+    // text + borders. Same reasoning as the width above: no upper cap, so
+    // row height keeps scaling together with the (now-uncapped) day column
+    // width and cells stay close to square instead of turning into wide,
+    // flat rectangles on large screens. Still bounded above by whatever
+    // vertical space is actually available, via the min() with
+    // availableRowHeight.
     final squareTarget = newDayColWidth * 1.1;
     final newRowHeight =
         (availableRowHeight < squareTarget ? availableRowHeight : squareTarget)
-            .clamp(20.0, 34.0);
+            .clamp(20.0, double.infinity);
 
     final heightRatio = newRowHeight / 34.0;
     final widthRatio = newDayColWidth / 34.0;
     final rawScale = heightRatio < widthRatio ? heightRatio : widthRatio;
-    final newFontScale = rawScale.clamp(0.65, 1.0);
+    // Text can grow a little on large screens along with the cells, but is
+    // capped well below the raw scale so numbers/labels never become
+    // oversized just because the day columns had to grow a lot to fill a
+    // very wide window.
+    final newFontScale = rawScale.clamp(0.65, 1.3);
 
     if (_rowHeight != newRowHeight ||
         _nameColWidth != newNameColWidth ||
