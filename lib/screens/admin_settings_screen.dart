@@ -4,6 +4,7 @@ import '../models/app_config.dart';
 import '../models/employee.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
+import 'admin_help_screen.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -392,7 +393,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('シフト希望表 設定')),
+      appBar: AppBar(
+        title: const Text('シフト希望表 設定'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使い方ガイド・ヘルプ',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AdminHelpScreen()),
+              );
+            },
+          ),
+        ],
+      ),
       body: SafeArea(
         child: _loading
             ? const Center(child: CircularProgressIndicator())

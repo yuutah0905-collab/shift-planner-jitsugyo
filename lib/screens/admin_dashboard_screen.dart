@@ -5,6 +5,7 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import 'submission_detail_screen.dart';
 import 'admin_settings_screen.dart';
+import 'admin_help_screen.dart';
 import 'daily_attendance_screen.dart';
 import 'monthly_shift_matrix_screen.dart';
 
@@ -185,6 +186,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               : '${_fmtMonthJp(_filterMonth)} シフト希望一覧',
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: '使い方ガイド・ヘルプ',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const AdminHelpScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: '希望表の設定',
