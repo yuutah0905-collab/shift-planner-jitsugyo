@@ -93,9 +93,39 @@ class ShiftMatrixPdfService {
     );
   }
 
+  // NOTE: This name is passed as the `name:` argument to
+  // `Printing.layoutPdf()` / used as the `filename:` for `Printing.sharePdf()`.
+  // On Flutter Web, the `printing` package / underlying PDF pipeline can hit
+  // a strict ASCII/Latin-1 string encoder somewhere in the save/print path,
+  // which throws `ArgumentError: Invalid argument (string): Contains
+  // invalid characters.` for any non-ASCII (e.g. Japanese) character. The
+  // in-PDF page content (rendered via embedded TTF fonts through pw.Text)
+  // is unaffected and can safely contain Japanese - only this identifier
+  // string needs to stay ASCII-safe.
   static String _fileBaseName(int year, int month, String department) {
-    final dept = department.isNotEmpty ? '_$department' : '';
-    return 'シフト表_$year年$month月$dept';
+    final monthStr = month.toString().padLeft(2, '0');
+    final deptSlug = department.isNotEmpty
+        ? '_${_toAsciiSlug(department)}'
+        : '';
+    return 'shift_${year}_$monthStr$deptSlug';
+  }
+
+  /// Converts arbitrary text (which may contain Japanese or other non-ASCII
+  /// characters) into an ASCII-only, filesystem/identifier-safe slug.
+  /// Non ASCII-alphanumeric characters are replaced with underscores, and
+  /// runs of underscores are collapsed.
+  static String _toAsciiSlug(String input) {
+    final buffer = StringBuffer();
+    for (final unit in input.codeUnits) {
+      final isAsciiAlnum =
+          (unit >= 0x30 && unit <= 0x39) || // 0-9
+          (unit >= 0x41 && unit <= 0x5A) || // A-Z
+          (unit >= 0x61 && unit <= 0x7A); // a-z
+      buffer.writeCharCode(isAsciiAlnum ? unit : 0x5F); // '_'
+    }
+    var result = buffer.toString().replaceAll(RegExp('_+'), '_');
+    result = result.replaceAll(RegExp(r'^_|_$'), '');
+    return result.isEmpty ? 'dept' : result;
   }
 
   static Future<Uint8List> _buildPdfBytes({
