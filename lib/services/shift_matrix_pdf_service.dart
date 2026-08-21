@@ -296,21 +296,26 @@ class ShiftMatrixPdfService {
 
       final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
       final label = isPaidLeave ? ShiftCode.paidLeaveCode : entry.code;
-      final accent = isPaidLeave ? _paidLeave : _primaryDeep;
+      // Solid, dark cell background with white text - a light background
+      // with dark text lost too much contrast when printed in monochrome
+      // (grayscale), making the shift-code symbols hard to read.
+      final cellBg = isPaidLeave ? _paidLeave : _primaryDeep;
 
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          color: PdfColor.fromInt(
-            isPaidLeave ? 0x333FA9D6 : 0x33EA5F98,
-          ),
+          color: cellBg,
           border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
         ),
         child: pw.Text(
           label,
-          style: pw.TextStyle(font: boldFont, fontSize: fs(7.0), color: accent),
+          style: pw.TextStyle(
+            font: boldFont,
+            fontSize: fs(7.0),
+            color: PdfColors.white,
+          ),
         ),
       );
     }
