@@ -3,6 +3,7 @@ import '../models/day_entry.dart';
 import '../models/employee.dart';
 import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
+import '../services/shift_matrix_pdf_service.dart';
 import '../theme/app_theme.dart';
 
 /// One row of the matrix: a single person's per-day entries for the target
@@ -72,6 +73,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   final ScrollController _bodyHController = ScrollController();
   bool _isSyncingV = false;
   bool _isSyncingH = false;
+  bool _isExportingPdf = false;
 
   static const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -340,11 +342,70 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     );
   }
 
+  /// Exports the currently-displayed matrix (selected department, target
+  /// month) exactly as shown on screen to a single A4-landscape PDF page,
+  /// then opens the platform print/preview sheet so the user can save or
+  /// print it. Uses the same rows/ordering already computed for the
+  /// on-screen table via [_rows], just repackaged into the PDF service's
+  /// plain public row type.
+  Future<void> _exportPdf() async {
+    if (_isExportingPdf) return;
+    final rows = _rows;
+    if (rows.isEmpty) return;
+
+    setState(() => _isExportingPdf = true);
+    try {
+      final pdfRows = rows
+          .map(
+            (r) => ShiftMatrixPdfRow(
+              name: r.name,
+              entriesByDate: r.entriesByDate,
+              totalHours: r.totalHours,
+              filledDaysCount: r.filledDaysCount,
+            ),
+          )
+          .toList();
+
+      await ShiftMatrixPdfService.previewAndPrint(
+        year: _year,
+        month: _month,
+        daysInMonth: _daysInMonth,
+        department: _selectedDepartment,
+        rows: pdfRows,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('PDF出力に失敗しました: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isExportingPdf = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = _rows;
     return Scaffold(
-      appBar: AppBar(title: const Text('月間シフト一覧表')),
+      appBar: AppBar(
+        title: const Text('月間シフト一覧表'),
+        actions: [
+          IconButton(
+            tooltip: 'PDF出力（A4横1ページ）',
+            onPressed: rows.isEmpty || _isExportingPdf ? null : _exportPdf,
+            icon: _isExportingPdf
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.picture_as_pdf_outlined),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Column(
           children: [

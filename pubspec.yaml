@@ -46,6 +46,10 @@ dependencies:
   # Utility
   intl: 0.20.2
 
+  # PDF export (monthly shift matrix -> A4 landscape PDF)
+  pdf: 3.12.0
+  printing: 5.14.3
+
   # Japanese localization support (required for date pickers, etc.)
   flutter_localizations:
     sdk: flutter
