@@ -142,6 +142,20 @@ class FirestoreService {
     await _db.collection('shift_submissions').doc(id).delete();
   }
 
+  /// Persists an admin's manual correction to an existing submission's
+  /// day entries (hours/code) plus its recomputed `totalHours`, made from
+  /// the monthly shift matrix screen's tap-to-edit-hours feature. Only
+  /// `days` and `totalHours` are touched - everything else on the
+  /// submission document (name, department, targetMonth, submittedAt,
+  /// etc.) is left untouched.
+  Future<void> updateSubmission(ShiftSubmission submission) async {
+    if (submission.id == null) return;
+    await _db.collection('shift_submissions').doc(submission.id).update({
+      'days': submission.days.map((d) => d.toMap()).toList(),
+      'totalHours': submission.totalHours,
+    });
+  }
+
   /// Update the app-wide config (admin settings screen)
   Future<void> updateConfig(AppConfig config) async {
     await _db.collection('app_settings').doc('config').set({

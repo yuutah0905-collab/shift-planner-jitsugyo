@@ -5,12 +5,14 @@ import '../models/day_entry.dart';
 import '../models/employee.dart';
 import '../models/shift_code.dart';
 import '../models/shift_submission.dart';
+import '../services/firestore_service.dart';
 import '../services/shift_matrix_pdf_service.dart';
 import '../theme/app_theme.dart';
 
 /// One row of the matrix: a single person's per-day entries for the target
 /// month, keyed by "YYYY-MM-DD" for O(1) lookup while building each cell.
 class _PersonRow {
+  final ShiftSubmission submission;
   final String name;
   final String department;
   final Map<String, DayEntry> entriesByDate;
@@ -18,12 +20,190 @@ class _PersonRow {
   final int filledDaysCount;
 
   _PersonRow({
+    required this.submission,
     required this.name,
     required this.department,
     required this.entriesByDate,
     required this.totalHours,
     required this.filledDaysCount,
   });
+}
+
+/// Result returned from [_HourEditSheet] when the admin taps "保存" or
+/// "クリア" - null means the sheet was dismissed without any change.
+class _HourEditResult {
+  final bool clear;
+  final bool paidLeave;
+  final double? hours;
+
+  const _HourEditResult({this.clear = false, this.paidLeave = false, this.hours});
+}
+
+/// Bottom sheet used by the monthly shift matrix's tap-to-edit-hours
+/// feature: lets the admin manually correct a single day's worked hours
+/// (free-text numeric entry), mark the day as paid leave, or clear it
+/// back to a day-off. Also shows the day's memo (if any) as read-only
+/// context, since tapping a cell used to only be for viewing the memo.
+class _HourEditSheet extends StatefulWidget {
+  final String personName;
+  final String dateLabel;
+  final String initialHours;
+  final bool initialPaidLeave;
+  final String memo;
+
+  const _HourEditSheet({
+    required this.personName,
+    required this.dateLabel,
+    required this.initialHours,
+    required this.initialPaidLeave,
+    required this.memo,
+  });
+
+  @override
+  State<_HourEditSheet> createState() => _HourEditSheetState();
+}
+
+class _HourEditSheetState extends State<_HourEditSheet> {
+  late TextEditingController _hoursController;
+  late bool _paidLeave;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoursController = TextEditingController(text: widget.initialHours);
+    _paidLeave = widget.initialPaidLeave;
+  }
+
+  @override
+  void dispose() {
+    _hoursController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_paidLeave) {
+      Navigator.of(context).pop(const _HourEditResult(paidLeave: true));
+      return;
+    }
+    final text = _hoursController.text.trim();
+    if (text.isEmpty) {
+      // Empty + not paid leave = same as clearing the day back to off.
+      Navigator.of(context).pop(const _HourEditResult(clear: true));
+      return;
+    }
+    final h = double.tryParse(text);
+    if (h == null || h < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('時間を正しく入力してください（例：3.5）')),
+      );
+      return;
+    }
+    Navigator.of(context).pop(_HourEditResult(hours: h));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 20,
+        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${widget.personName} ・ ${widget.dateLabel}',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDeep,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          if (widget.memo.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 16,
+                    color: AppColors.success,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      widget.memo,
+                      style: const TextStyle(fontSize: 13, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('有給休暇にする'),
+            value: _paidLeave,
+            activeThumbColor: AppColors.paidLeave,
+            onChanged: (v) => setState(() => _paidLeave = v),
+          ),
+          if (!_paidLeave) ...[
+            const SizedBox(height: 4),
+            TextField(
+              controller: _hoursController,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: '時間（h）',
+                hintText: '例）3.5',
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.clear),
+              label: const Text('クリア（休みにする）'),
+              onPressed: () => Navigator.of(
+                context,
+              ).pop(const _HourEditResult(clear: true)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(onPressed: _save, child: const Text('保存')),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Admin screen: "誰がいつ何のシフトか" all at a glance for the whole
@@ -61,6 +241,7 @@ class MonthlyShiftMatrixScreen extends StatefulWidget {
 }
 
 class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
   late String _selectedDepartment;
   late int _year;
   late int _month;
@@ -294,6 +475,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         map[d.date] = d;
       }
       return _PersonRow(
+        submission: s,
         name: s.name,
         department: s.department,
         entriesByDate: map,
@@ -337,49 +519,97 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   double _grandTotalHours(List<_PersonRow> rows) =>
       rows.fold(0.0, (sum, r) => sum + r.totalHours);
 
-  void _showMemoDialog(_PersonRow row, DayEntry entry, int day) {
-    showDialog(
+  /// Opens the manual hour-correction bottom sheet for [row]'s entry on
+  /// [day], applies the admin's change to the in-memory `DayEntry`
+  /// (mutating it in place - see DayEntry's mutable hours/code fields),
+  /// recomputes the submission's `totalHours`, persists both back to
+  /// Firestore, and refreshes the screen. If the day has a memo, it's
+  /// shown read-only inside the same sheet (this used to be a separate
+  /// tap-to-view-memo-only dialog, now merged into one tap target).
+  Future<void> _editHours(_PersonRow row, int day) async {
+    final key = _dateKey(day);
+    var entry = row.entriesByDate[key];
+    final dow = _weekdayOf(day);
+    final isWeekend = dow == 0 || dow == 6;
+    final dateLabel = '$_month月$day日（${_dowJp[dow]}）';
+
+    // A blank cell has no DayEntry yet - synthesize one on the fly so the
+    // sheet has something to edit; it's inserted into the submission's
+    // `days` list only if the admin actually saves a value.
+    final isNewEntry = entry == null;
+    entry ??= DayEntry(
+      date: key,
+      dayOfWeek: _dowJp[dow],
+      isHoliday: isWeekend,
+    );
+
+    final result = await showModalBottomSheet<_HourEditResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(
-              Icons.sticky_note_2_outlined,
-              color: AppColors.success,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                row.name,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              row.department.isNotEmpty
-                  ? '${row.department} ・ $_month月$day日'
-                  : '$_month月$day日',
-              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
-            ),
-            const SizedBox(height: 12),
-            Text(entry.memo, style: const TextStyle(fontSize: 14, height: 1.4)),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('閉じる'),
-          ),
-        ],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _HourEditSheet(
+        personName: row.name,
+        dateLabel: dateLabel,
+        initialHours: entry!.hours,
+        initialPaidLeave: ShiftCode.isPaidLeave(entry.code),
+        memo: entry.memo,
       ),
     );
+    if (result == null) return;
+
+    setState(() {
+      if (result.clear) {
+        entry!.hours = '';
+        entry.code = '';
+      } else if (result.paidLeave) {
+        entry!.code = ShiftCode.paidLeaveCode;
+        entry.hours = '';
+      } else if (result.hours != null) {
+        entry!.hours = result.hours!.toStringAsFixed(2);
+        entry.code = '';
+      }
+      if (isNewEntry) {
+        row.submission.days.add(entry!);
+      }
+    });
+
+    double newTotal = 0;
+    for (final d in row.submission.days) {
+      final h = double.tryParse(d.hours);
+      if (h != null) newTotal += h;
+    }
+    final updated = ShiftSubmission(
+      id: row.submission.id,
+      name: row.submission.name,
+      department: row.submission.department,
+      targetMonth: row.submission.targetMonth,
+      monthMemo: row.submission.monthMemo,
+      days: row.submission.days,
+      totalHours: newTotal,
+      submittedAt: row.submission.submittedAt,
+      previousVersions: row.submission.previousVersions,
+    );
+
+    try {
+      await _firestoreService.updateSubmission(updated);
+      if (!mounted) return;
+      setState(() {
+        final idx = widget.submissions.indexWhere(
+          (s) => s.id == row.submission.id,
+        );
+        if (idx != -1) widget.submissions[idx] = updated;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('時間を修正しました')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
+    }
   }
 
   /// Exports the currently-displayed matrix (selected department, target
@@ -486,7 +716,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップでメモ確認 ・ 最下部の「合計」行はその日の全員の合計時間',
+                      '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップで時間を修正 ・ 最下部の「合計」行はその日の全員の合計時間',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.inkMute,
@@ -946,71 +1176,75 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final isWeekend = dow == 0 || dow == 6;
 
     final isHolidayCell = entry?.isHoliday ?? isWeekend;
+    final isBlank = entry == null || (entry.hours.isEmpty && entry.code.isEmpty);
 
-    if (entry == null || (entry.hours.isEmpty && entry.code.isEmpty)) {
-      // Blank cell = that person is off that day, so always shade it with
-      // the same moderate gray regardless of weekday - not just on
-      // weekends/holidays - so every day-off cell reads consistently.
-      return Container(
-        width: _dayColWidth,
-        height: _rowHeight,
-        decoration: BoxDecoration(
-          color: AppColors.holidayGray,
-          border: Border.all(color: AppColors.gridLine, width: 0.5),
-        ),
-      );
-    }
-
-    final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
-    final hasMemo = entry.memo.isNotEmpty;
+    final isPaidLeave = !isBlank && ShiftCode.isPaidLeave(entry.code);
+    final hasMemo = !isBlank && entry.memo.isNotEmpty;
     // Prefer the numeric hour value ("4.25") over the internal A~Y letter
     // code for display, matching the paper/Excel shift table the company
     // uses (see the reference image) - the letter codes are just an
     // internal shorthand for data entry, not what should be printed/shown.
     // Paid leave has no fixed hour value, so it keeps its "有" label.
-    final hoursValue = double.tryParse(entry.hours);
-    final label = isPaidLeave
-        ? ShiftCode.paidLeaveCode
-        : (hoursValue != null
-              ? hoursValue.toStringAsFixed(2)
-              : entry.code);
+    final hoursValue = isBlank ? null : double.tryParse(entry.hours);
+    final label = isBlank
+        ? ''
+        : (isPaidLeave
+              ? ShiftCode.paidLeaveCode
+              : (hoursValue != null
+                    ? hoursValue.toStringAsFixed(2)
+                    : entry.code));
 
     // Paid leave gets a distinct light-blue fill so it stands out clearly
-    // from a normal work shift; otherwise fall back to the moderate gray
-    // for weekend/holiday cells, or plain white for a normal work day.
+    // from a normal work shift; blank cells (day off) and weekend/holiday
+    // cells share the same moderate gray; a normal filled work day is
+    // plain white/transparent.
     final Color cellColor = isPaidLeave
         ? AppColors.paidLeaveBg
-        : (isHolidayCell ? AppColors.holidayGray : Colors.transparent);
+        : ((isBlank || isHolidayCell) ? AppColors.holidayGray : Colors.transparent);
 
+    // Every cell (including blank ones) is tappable so the admin can
+    // manually correct/enter the day's hours by hand.
     return InkWell(
-      onTap: hasMemo ? () => _showMemoDialog(row, entry, day) : null,
+      onTap: () => _editHours(row, day),
       child: Container(
         width: _dayColWidth,
         height: _rowHeight,
-        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: cellColor,
           border: Border.all(color: AppColors.gridLine, width: 0.5),
         ),
         child: Stack(
-          alignment: Alignment.center,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 11 * _fontScale,
-                color: AppColors.ink,
+            // The hour/code label stays centered, but is nudged slightly
+            // toward the bottom-right whenever a memo dot is shown in the
+            // top-left corner, so the two never overlap even in the
+            // narrowest day columns (as low as 20px wide).
+            Positioned.fill(
+              child: Align(
+                alignment: hasMemo
+                    ? const Alignment(0.2, 0.35)
+                    : Alignment.center,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11 * _fontScale,
+                    color: AppColors.ink,
+                  ),
+                ),
               ),
             ),
             if (hasMemo)
               Positioned(
                 top: 2,
                 left: 2,
-                child: Icon(
-                  Icons.circle,
-                  size: 5 * _fontScale,
-                  color: AppColors.success,
+                child: Container(
+                  width: 5 * _fontScale,
+                  height: 5 * _fontScale,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                  ),
                 ),
               ),
           ],
