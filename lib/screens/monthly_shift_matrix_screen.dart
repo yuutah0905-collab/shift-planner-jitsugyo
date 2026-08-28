@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/day_entry.dart';
 import '../models/employee.dart';
 import '../models/shift_code.dart';
@@ -74,6 +76,15 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   bool _isSyncingV = false;
   bool _isSyncingH = false;
   bool _isExportingPdf = false;
+
+  // Free-typed "備考" (remarks) notes at the bottom of the matrix, matching
+  // the paper/Excel shift table's bottom remarks section (per-employee
+  // free-text notes about date/time exceptions, etc). Saved locally per
+  // target month + department, since there's no dedicated backend field
+  // for this yet.
+  final TextEditingController _remarksController = TextEditingController();
+  Timer? _remarksSaveDebounce;
+  bool _remarksLoaded = false;
 
   static const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -186,6 +197,36 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       () =>
           _syncOffset(_bodyHController, _headerHController, isVertical: false),
     );
+    _loadRemarks();
+  }
+
+  /// Local-storage key for the remarks text box, scoped to the currently
+  /// selected target month + department so switching tabs shows the right
+  /// notes instead of mixing departments together.
+  String get _remarksStorageKey =>
+      'shift_matrix_remarks_v1_${widget.targetMonth}_$_selectedDepartment';
+
+  Future<void> _loadRemarks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_remarksStorageKey) ?? '';
+    if (!mounted) return;
+    _remarksController.text = saved;
+    _remarksLoaded = true;
+  }
+
+  void _onRemarksChanged(String value) {
+    _remarksSaveDebounce?.cancel();
+    _remarksSaveDebounce = Timer(const Duration(milliseconds: 500), () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_remarksStorageKey, value);
+    });
+  }
+
+  Future<void> _switchDepartment(String department) async {
+    setState(() => _selectedDepartment = department);
+    _remarksLoaded = false;
+    await _loadRemarks();
+    if (mounted) setState(() {});
   }
 
   /// Mirrors [source]'s scroll offset onto [target], guarded by a
@@ -222,6 +263,8 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     _gridVController.dispose();
     _headerHController.dispose();
     _bodyHController.dispose();
+    _remarksSaveDebounce?.cancel();
+    _remarksController.dispose();
     super.dispose();
   }
 
@@ -482,8 +525,68 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       },
                     ),
             ),
+            _buildRemarksSection(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Free-typed remarks box pinned to the very bottom of the screen,
+  /// matching the "備考" section at the bottom of the paper/Excel shift
+  /// table (per-employee free-text notes about date/time exceptions,
+  /// etc). Manually typed by the admin - not auto-generated from the
+  /// shift data above.
+  Widget _buildRemarksSection() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.line, width: 1)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.edit_note, size: 16, color: AppColors.primaryDeep),
+              SizedBox(width: 4),
+              Text(
+                '備考',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: AppColors.primaryDeep,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _remarksController,
+            enabled: _remarksLoaded,
+            onChanged: _onRemarksChanged,
+            maxLines: 4,
+            minLines: 3,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '例）米下さん 9/1,2,3【9:00〜15:30】 9/7【8:30〜14:30】…',
+              hintStyle: const TextStyle(
+                fontSize: 12,
+                color: AppColors.inkMute,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 8,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: AppColors.line),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -493,7 +596,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (_) => setState(() => _selectedDepartment = label),
+      onSelected: (_) => _switchDepartment(label),
       selectedColor: AppColors.primary,
       backgroundColor: AppColors.background,
       labelStyle: TextStyle(
@@ -838,15 +941,17 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final dow = _weekdayOf(day);
     final isWeekend = dow == 0 || dow == 6;
 
+    final isHolidayCell = entry?.isHoliday ?? isWeekend;
+
     if (entry == null || (entry.hours.isEmpty && entry.code.isEmpty)) {
-      // Blank cell - still shade weekends/holidays lightly for readability.
+      // Blank cell - still shade weekends/holidays with a moderate gray so
+      // day-off columns stay clearly readable (incl. when printed/viewed
+      // in monochrome), without being so dark it looks like a filled cell.
       return Container(
         width: _dayColWidth,
         height: _rowHeight,
         decoration: BoxDecoration(
-          color: (entry?.isHoliday ?? isWeekend)
-              ? AppColors.weekendBg
-              : Colors.transparent,
+          color: isHolidayCell ? AppColors.holidayGray : Colors.transparent,
           border: const Border(
             right: BorderSide(color: AppColors.line, width: 0.4),
           ),
@@ -855,8 +960,18 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     }
 
     final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
-    final accent = isPaidLeave ? AppColors.paidLeave : AppColors.primary;
     final hasMemo = entry.memo.isNotEmpty;
+    // Prefer the numeric hour value ("4.25") over the internal A~Y letter
+    // code for display, matching the paper/Excel shift table the company
+    // uses (see the reference image) - the letter codes are just an
+    // internal shorthand for data entry, not what should be printed/shown.
+    // Paid leave has no fixed hour value, so it keeps its "有" label.
+    final hoursValue = double.tryParse(entry.hours);
+    final label = isPaidLeave
+        ? ShiftCode.paidLeaveCode
+        : (hoursValue != null
+              ? hoursValue.toStringAsFixed(2)
+              : entry.code);
 
     return InkWell(
       onTap: hasMemo ? () => _showMemoDialog(row, entry, day) : null,
@@ -865,7 +980,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         height: _rowHeight,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: accent.withValues(alpha: 0.14),
+          // No colored fill for shift cells anymore - plain white/gray
+          // background with black text, matching the reference table.
+          color: isHolidayCell ? AppColors.holidayGray : Colors.transparent,
           border: const Border(
             right: BorderSide(color: AppColors.line, width: 0.4),
           ),
@@ -874,19 +991,17 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
           alignment: Alignment.center,
           children: [
             Text(
-              isPaidLeave ? ShiftCode.paidLeaveCode : entry.code,
+              label,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 12 * _fontScale,
-                color: isPaidLeave
-                    ? AppColors.paidLeave
-                    : AppColors.primaryDeep,
+                fontSize: 11 * _fontScale,
+                color: AppColors.ink,
               ),
             ),
             if (hasMemo)
               Positioned(
                 top: 2,
-                right: 2,
+                left: 2,
                 child: Icon(
                   Icons.circle,
                   size: 5 * _fontScale,

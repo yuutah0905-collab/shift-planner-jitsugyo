@@ -17,6 +17,11 @@ class AppColors {
   static const Color line = Color(0xFFD9D5D6);
   static const Color weekendBg = Color(0xFFF7F5F5);
   static const Color holidayBg = Color(0xFFF0EEEE);
+  // Moderate (not-too-dark) gray for holiday/off-day columns in the
+  // monthly shift matrix - dark enough to stay clearly visible even when
+  // printed in monochrome, but light enough that black text on top of it
+  // still reads comfortably.
+  static const Color holidayGray = Color(0xFFD9D9D9);
   static const Color sun = Color(0xFFC4275F);
   static const Color sat = Color(0xFF262425);
   static const Color success = Color(0xFF2A9D8F);
