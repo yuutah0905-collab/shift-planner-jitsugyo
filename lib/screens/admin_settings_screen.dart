@@ -39,6 +39,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   List<String> _departments = [];
   List<Employee> _employees = [];
   String? _empDept;
+  // Filters the roster list shown in the "⑥従業員名簿" section by
+  // department, so admins with many part-timers across several
+  // departments aren't stuck scrolling through everyone at once.
+  // '' means "すべて" (no filter, shows every department together).
+  // Defaults to the first department once loaded, since that's the most
+  // common starting point (most admins only manage one department).
+  String _rosterFilterDept = '';
   // Carried through unchanged from the loaded config - this screen has no
   // UI for it (it's toggled per-department from the monthly shift matrix
   // screen's "シフト配布" button instead), but _save() must still
@@ -111,6 +118,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             .toList();
       }
       _empDept = _departments.isNotEmpty ? _departments.first : null;
+      _rosterFilterDept = _departments.isNotEmpty ? _departments.first : '';
       setState(() => _loading = false);
       if (missing > 0 && mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -253,16 +261,52 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _employees.remove(e));
   }
 
+  /// Employees currently visible in the roster list, narrowed to
+  /// [_rosterFilterDept] (empty = show every department together). This
+  /// is what feeds the ReorderableListView below - filtering by
+  /// department is purely a *display* convenience so admins with many
+  /// part-timers across several departments aren't stuck scrolling
+  /// through everyone at once; the underlying `_employees` list (and the
+  /// saved order within it) is unaffected by which filter is selected.
+  List<Employee> get _filteredEmployees => _rosterFilterDept.isEmpty
+      ? _employees
+      : _employees.where((e) => e.department == _rosterFilterDept).toList();
+
   /// Reorders the roster when the admin drags a row to a new position.
   /// This list order is what drives the "登録順" sorting used on the
   /// 月間シフト一覧表 / 日別出勤状況 screens (see [_buildRosterOrder] in
   /// those screens), so dragging here directly changes the display order
   /// shown to the admin elsewhere once saved.
+  ///
+  /// [oldIndex]/[newIndex] are indices within the currently DISPLAYED
+  /// (possibly department-filtered) list, not the full `_employees` list.
+  /// When a department filter is active, the drag only reorders that
+  /// department's members RELATIVE TO EACH OTHER - other departments'
+  /// employees keep their existing relative order and slot positions in
+  /// `_employees`, so switching the filter to another department later
+  /// still shows that department's own last-saved order untouched.
   void _reorderEmployee(int oldIndex, int newIndex) {
     setState(() {
       if (newIndex > oldIndex) newIndex -= 1;
-      final item = _employees.removeAt(oldIndex);
-      _employees.insert(newIndex, item);
+      if (_rosterFilterDept.isEmpty) {
+        final item = _employees.removeAt(oldIndex);
+        _employees.insert(newIndex, item);
+        return;
+      }
+      // Filtered view: reorder within the department-only sublist, then
+      // write the new sequence back into the same slots those employees
+      // occupied in the full list (so unrelated departments' positions
+      // are never disturbed).
+      final sub = _filteredEmployees;
+      final item = sub.removeAt(oldIndex);
+      sub.insert(newIndex, item);
+      final slots = <int>[
+        for (int i = 0; i < _employees.length; i++)
+          if (_employees[i].department == _rosterFilterDept) i,
+      ];
+      for (int i = 0; i < slots.length; i++) {
+        _employees[slots[i]] = sub[i];
+      }
     });
   }
 
@@ -586,6 +630,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Widget _buildEmployeeRoster() {
+    final visible = _filteredEmployees;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -594,9 +639,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           'PINを設定すると、その人が初めて名前を選ぶ端末で本人確認が入り、'
           'なりすまし提出を防げます（PINは鍵アイコンから確認・変更できます）。\n'
           '右端の「☰」を長押し・ドラッグすると並び順を変更できます（月間シフト一覧表・'
-          '日別出勤状況の表示順に反映されます）。',
+          '日別出勤状況の表示順に反映されます）。部署チップで絞り込んで表示できます。',
           style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
         ),
+        if (_departments.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _rosterDeptChip('すべて', ''),
+              for (final d in _departments) _rosterDeptChip(d, d),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
         if (_employees.isEmpty)
           const Padding(
@@ -606,15 +662,23 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               style: TextStyle(fontSize: 12, color: AppColors.inkMute),
             ),
           )
+        else if (visible.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Text(
+              '「$_rosterFilterDept」に登録されている従業員はいません',
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+          )
         else
           ReorderableListView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             buildDefaultDragHandles: false,
             onReorder: _reorderEmployee,
-            itemCount: _employees.length,
+            itemCount: visible.length,
             itemBuilder: (context, index) {
-              final e = _employees[index];
+              final e = visible[index];
               return Container(
                 key: ValueKey('${e.name}_${e.department}'),
                 margin: const EdgeInsets.only(bottom: 6),
@@ -740,6 +804,40 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Department filter chip for the "⑥従業員名簿" roster list. Selecting
+  /// one narrows the DISPLAYED list to just that department (or clears
+  /// the filter for "すべて") - purely a display convenience, the
+  /// underlying `_employees` data and save behavior are unaffected.
+  Widget _rosterDeptChip(String label, String value) {
+    final selected = _rosterFilterDept == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() {
+        _rosterFilterDept = value;
+        // Also default the "追加" dropdown to the filtered department,
+        // so adding a new employee while filtered to e.g. 出庫 doesn't
+        // require re-selecting the department a second time.
+        if (value.isNotEmpty) _empDept = value;
+      }),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.background,
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : AppColors.ink,
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.line,
+        ),
+      ),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 
