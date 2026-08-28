@@ -415,6 +415,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         daysInMonth: _daysInMonth,
         department: _selectedDepartment,
         rows: pdfRows,
+        remarks: _remarksController.text,
       );
     } catch (e) {
       if (!mounted) return;
@@ -679,7 +680,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         alignment: Alignment.centerLeft,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         decoration: const BoxDecoration(
-                          color: AppColors.holidayBg,
+                          color: AppColors.holidayGray,
                           border: Border(
                             right: BorderSide(color: AppColors.line),
                             top: BorderSide(
@@ -693,7 +694,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12 * _fontScale,
-                            color: AppColors.primaryDeep,
+                            color: AppColors.ink,
                           ),
                         ),
                       ),
@@ -858,7 +859,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 11 * _fontScale,
-                color: AppColors.primaryDeep,
+                color: AppColors.ink,
               ),
             ),
           ),
@@ -875,7 +876,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     return Container(
       height: _rowHeight,
       decoration: const BoxDecoration(
-        color: AppColors.holidayBg,
+        color: AppColors.holidayGray,
         border: Border(
           top: BorderSide(color: AppColors.primaryDeep, width: 1.4),
         ),
@@ -895,7 +896,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 12 * _fontScale,
-                color: AppColors.primaryDeep,
+                color: AppColors.ink,
               ),
             ),
           ),
@@ -907,7 +908,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 11 * _fontScale,
-                color: AppColors.primaryDeep,
+                color: AppColors.ink,
               ),
             ),
           ),
@@ -929,7 +930,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 10 * _fontScale,
-          color: AppColors.primaryDeep,
+          color: AppColors.ink,
         ),
       ),
     );

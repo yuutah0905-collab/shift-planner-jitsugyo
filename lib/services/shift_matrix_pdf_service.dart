@@ -66,6 +66,7 @@ class ShiftMatrixPdfService {
     required int daysInMonth,
     required String department,
     required List<ShiftMatrixPdfRow> rows,
+    String remarks = '',
   }) async {
     await Printing.layoutPdf(
       name: _fileBaseName(year, month, department),
@@ -75,6 +76,7 @@ class ShiftMatrixPdfService {
         daysInMonth: daysInMonth,
         department: department,
         rows: rows,
+        remarks: remarks,
       ),
     );
   }
@@ -88,6 +90,7 @@ class ShiftMatrixPdfService {
     required int daysInMonth,
     required String department,
     required List<ShiftMatrixPdfRow> rows,
+    String remarks = '',
   }) async {
     final bytes = await _buildPdfBytes(
       year: year,
@@ -95,6 +98,7 @@ class ShiftMatrixPdfService {
       daysInMonth: daysInMonth,
       department: department,
       rows: rows,
+      remarks: remarks,
     );
     await Printing.sharePdf(
       bytes: bytes,
@@ -143,6 +147,7 @@ class ShiftMatrixPdfService {
     required int daysInMonth,
     required String department,
     required List<ShiftMatrixPdfRow> rows,
+    String remarks = '',
   }) async {
     final regularFontData = await rootBundle.load(
       'assets/fonts/NotoSansJP-Regular.ttf',
@@ -161,9 +166,24 @@ class ShiftMatrixPdfService {
     const titleHeight = 22.0;
     const titleGap = 6.0;
 
+    // Reserve a fixed-height "備考" box at the bottom of the page,
+    // matching the on-screen remarks field, so the manually-typed notes
+    // are included in the printed/exported PDF too - only reserve the
+    // space (and shrink the table to fit) when there is actually
+    // something to show, so PDFs without remarks keep using the full
+    // page for the table exactly as before.
+    final hasRemarks = remarks.trim().isNotEmpty;
+    const remarksGap = 6.0;
+    const remarksHeight = 56.0;
+    final remarksBlockHeight = hasRemarks ? remarksGap + remarksHeight : 0.0;
+
     final printableWidth = landscape.width - margin * 2;
     final availableTableHeight =
-        landscape.height - margin * 2 - titleHeight - titleGap;
+        landscape.height -
+        margin * 2 -
+        titleHeight -
+        titleGap -
+        remarksBlockHeight;
 
     // --- Column widths: always consume exactly 100% of printableWidth,
     // never leaving blank space on the right regardless of daysInMonth
@@ -538,6 +558,36 @@ class ShiftMatrixPdfService {
                   pw.Expanded(child: gridColumn),
                 ],
               ),
+              if (hasRemarks) ...[
+                pw.SizedBox(height: remarksGap),
+                pw.Container(
+                  width: printableWidth,
+                  height: remarksHeight,
+                  padding: const pw.EdgeInsets.all(6),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: _line, width: 0.6),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        '備考',
+                        style: pw.TextStyle(font: boldFont, fontSize: 9),
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Expanded(
+                        child: pw.Text(
+                          remarks,
+                          style: pw.TextStyle(
+                            font: regularFont,
+                            fontSize: 8.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           );
         },
