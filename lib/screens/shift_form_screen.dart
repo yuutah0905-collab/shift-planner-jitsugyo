@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_config.dart';
@@ -37,6 +39,20 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   bool _loading = true;
   bool _submitting = false;
 
+  // Live-updates the config (target month, holidays, deadline, notice,
+  // and crucially `publishedDepartments`) so the "シフト配布" banner
+  // appears immediately once an admin publishes - no pull-to-refresh or
+  // app restart needed while this screen is open.
+  StreamSubscription<AppConfig>? _configSub;
+  // Tracks whether OUR department was published the last time we received
+  // a config update, so we can detect the false -> true transition and
+  // pop up a one-time notification (in addition to the persistent banner)
+  // the moment the admin publishes - rather than relying on the banner
+  // silently appearing, which is easy to miss.
+  bool? _wasPublished;
+
+
+
   // 一括入力（bulk input）モード: 有効化すると日付セルをタップして
   // 複数選択でき、選択した日にまとめて同じ記号を適用できる。
   bool _bulkMode = false;
@@ -52,10 +68,51 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     final config = await _firestoreService.fetchConfig();
     _buildDays(config);
     await _restoreLocalState(config);
+    _wasPublished = _selectedDepartment != null &&
+        _selectedDepartment!.isNotEmpty &&
+        config.isDepartmentPublished(_selectedDepartment!);
     setState(() {
       _config = config;
       _loading = false;
     });
+    // Start listening for real-time config changes AFTER the initial load
+    // + local-state restore above have settled `_selectedDepartment`, so
+    // the very first snapshot's publish-transition check (in
+    // _onConfigUpdate) compares against the correct baseline instead of
+    // a default/empty department.
+    _configSub = _firestoreService.watchConfig().listen(_onConfigUpdate);
+  }
+
+  /// Called on every real-time config update (admin edits settings,
+  /// toggles "シフト配布" for a department, etc.). Rebuilds the day grid
+  /// only if the target month actually changed (to avoid clobbering the
+  /// user's in-progress input on every unrelated config write), and shows
+  /// a one-time SnackBar notification the moment OUR department's publish
+  /// state flips from not-published to published - so the user finds out
+  /// without needing to pull-to-refresh or notice the banner appearing.
+  void _onConfigUpdate(AppConfig config) {
+    if (!mounted) return;
+    final monthChanged = _config != null && _config!.targetMonth != config.targetMonth;
+    if (monthChanged) {
+      _buildDays(config);
+    }
+    final nowPublished = _selectedDepartment != null &&
+        _selectedDepartment!.isNotEmpty &&
+        config.isDepartmentPublished(_selectedDepartment!);
+    final justPublished = _wasPublished == false && nowPublished;
+    setState(() {
+      _config = config;
+    });
+    _wasPublished = nowPublished;
+    if (justPublished) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('シフトが配布されました。下の「月間シフト一覧表を見る」から確認できます。'),
+          backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   /// Pull-to-refresh: re-fetch the admin config (target month, holidays,
@@ -636,6 +693,16 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                     // 氏名が混在しないよう手入力扱いのままにする
                                     // （氏名自体はクリアしない＝入力し直す手間を防ぐ）
                                   });
+                                  // Re-baseline the publish-transition tracker
+                                  // for the newly selected department, so
+                                  // switching TO an already-published
+                                  // department doesn't spuriously trigger the
+                                  // "配布されました" SnackBar on the next
+                                  // unrelated config update.
+                                  _wasPublished = _config != null &&
+                                      val != null &&
+                                      val.isNotEmpty &&
+                                      _config!.isDepartmentPublished(val);
                                   _saveLocal();
                                 },
                               ),
@@ -879,6 +946,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
 
   @override
   void dispose() {
+    _configSub?.cancel();
     _nameController.dispose();
     _monthMemoController.dispose();
     super.dispose();

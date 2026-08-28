@@ -31,6 +31,30 @@ class FirestoreService {
     return AppConfig.fallback();
   }
 
+  /// Streams the app-wide config in real time, so screens like the
+  /// shift-request form can react immediately (e.g. show the "シフト配布"
+  /// banner) as soon as an admin toggles publish state - without the
+  /// part-time staff member needing to pull-to-refresh or reopen the app.
+  /// Falls back to a single [AppConfig.fallback] value if the doc doesn't
+  /// exist yet; stream errors are swallowed (caller keeps last-known
+  /// config) since transient network hiccups shouldn't kick the user back
+  /// to a blank/fallback state while they're mid-input.
+  Stream<AppConfig> watchConfig() {
+    return _db
+        .collection('app_settings')
+        .doc('config')
+        .snapshots()
+        .map((doc) {
+          if (doc.exists && doc.data() != null) {
+            return AppConfig.fromMap(doc.data()!);
+          }
+          return AppConfig.fallback();
+        })
+        .handleError((e) {
+          if (kDebugMode) debugPrint('watchConfig error: $e');
+        });
+  }
+
   /// Submit a shift request to Firestore
   Future<void> submitShift(ShiftSubmission submission) async {
     final data = submission.toMap();
