@@ -783,7 +783,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         actions: [
           if (!widget.readOnly && _selectedDepartment.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
               child: _publishLoading
                   ? const SizedBox(
                       width: 20,
@@ -795,7 +795,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         ),
                       ),
                     )
-                  : OutlinedButton.icon(
+                  // Keep this button compact: on narrow phone screens the
+                  // AppBar has to fit the back arrow, title, this button,
+                  // AND the PDF icon all on one row. A longer label (e.g.
+                  // one that also included the department name) would
+                  // wrap onto a 2nd line and get vertically clipped by the
+                  // AppBar's fixed height, corrupting the text (a glyph's
+                  // descender gets cut off, making "布" look like a
+                  // garbled character). So: short 1-line-only label, no
+                  // icon (icon+text together didn't fit), tight padding.
+                  : OutlinedButton(
                       onPressed: _togglePublish,
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
@@ -803,15 +812,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                             ? AppColors.success
                             : Colors.transparent,
                         side: const BorderSide(color: Colors.white),
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: const Size(0, 36),
+                        visualDensity: VisualDensity.compact,
                       ),
-                      icon: Icon(
-                        _isPublished
-                            ? Icons.check_circle_outline
-                            : Icons.campaign_outlined,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _isPublished ? '$_selectedDepartment 配布中' : 'シフト配布',
+                      child: Text(
+                        _isPublished ? '配布中' : 'シフト配布',
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
                       ),
                     ),
             ),
