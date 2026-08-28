@@ -39,22 +39,17 @@ class ShiftMatrixPdfService {
 
   // Brand colors, mirrored from AppColors in theme/app_theme.dart (the pdf
   // package uses its own PdfColor type, so these can't be shared directly).
+  // Kept in sync with the on-screen matrix (monthly_shift_matrix_screen.dart):
+  // no colored cell/header fills anywhere, plain black text throughout, and
+  // holiday/day-off cells use the same moderate gray (_holidayGray) as the
+  // on-screen AppColors.holidayGray - so the printed/exported PDF always
+  // looks identical to what's shown on screen.
+  static final _ink = PdfColor.fromInt(0xFF262425);
   static final _primaryDeep = PdfColor.fromInt(0xFFC4275F);
   static final _line = PdfColor.fromInt(0xFFD9D5D6);
-  static final _weekendBg = PdfColor.fromInt(0xFFF7F5F5);
-  static final _holidayBg = PdfColor.fromInt(0xFFF0EEEE);
-  static final _paidLeave = PdfColor.fromInt(0xFF3FA9D6);
+  static final _holidayGray = PdfColor.fromInt(0xFFD9D9D9);
   static final _surface = PdfColor.fromInt(0xFFFFFFFF);
   static final _background = PdfColor.fromInt(0xFFFAFAFA);
-
-  // Header backgrounds for Sunday / Saturday day-number cells. These MUST
-  // be solid, dark enough colors (not near-transparent white) so the white
-  // day-number text stays readable even on a monochrome (grayscale)
-  // printer, where hue differences disappear and only lightness matters.
-  // Previously these cells used a near-transparent white background with
-  // white text, which was invisible in both color and monochrome print.
-  static final _sundayHeaderBg = PdfColor.fromInt(0xFF9A2D42); // dark red
-  static final _saturdayHeaderBg = PdfColor.fromInt(0xFF1F4E79); // dark blue
 
   /// Opens the platform print/preview sheet (Web: browser print dialog with
   /// a "Save as PDF" destination; Android: native print/share sheet) so the
@@ -233,25 +228,12 @@ class ShiftMatrixPdfService {
 
     pw.Widget headerDayCell(int day) {
       final dow = weekdayOf(day).toInt();
-      final isSunday = dow == 0;
-      final isSaturday = dow == 6;
-      // Solid, dark backgrounds for Sun/Sat so white text stays readable
-      // even when printed in monochrome (grayscale) - see comment on the
-      // color constants above.
-      final headerBg = isSunday
-          ? _sundayHeaderBg
-          : isSaturday
-          ? _saturdayHeaderBg
-          : _primaryDeep;
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          color: headerBg,
-          border: pw.Border(
-            right: pw.BorderSide(color: PdfColors.white, width: 0.4),
-          ),
+          border: pw.Border(right: pw.BorderSide(color: _line, width: 0.4)),
         ),
         child: pw.Column(
           mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -261,7 +243,7 @@ class ShiftMatrixPdfService {
               style: pw.TextStyle(
                 font: boldFont,
                 fontSize: fs(7.2),
-                color: PdfColors.white,
+                color: _ink,
               ),
             ),
             pw.Text(
@@ -269,7 +251,7 @@ class ShiftMatrixPdfService {
               style: pw.TextStyle(
                 font: regularFont,
                 fontSize: fs(5.4),
-                color: PdfColors.white,
+                color: _ink,
               ),
             ),
           ],
@@ -282,7 +264,9 @@ class ShiftMatrixPdfService {
         width: totalColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
-        color: _primaryDeep,
+        decoration: pw.BoxDecoration(
+          border: pw.Border(left: pw.BorderSide(color: _line, width: 0.4)),
+        ),
         padding: const pw.EdgeInsets.symmetric(horizontal: 1),
         child: pw.Text(
           label,
@@ -291,7 +275,7 @@ class ShiftMatrixPdfService {
           style: pw.TextStyle(
             font: boldFont,
             fontSize: fs(5.6),
-            color: PdfColors.white,
+            color: _ink,
           ),
         ),
       );
@@ -303,30 +287,35 @@ class ShiftMatrixPdfService {
       final dow = weekdayOf(day).toInt();
       final isWeekend = dow == 0 || dow == 6;
 
+      final isHolidayCell = (entry?.isHoliday ?? isWeekend);
+
       if (entry == null || (entry.hours.isEmpty && entry.code.isEmpty)) {
+        // No colored fill for shift cells - plain white/gray background
+        // with black text, matching the on-screen matrix.
         return pw.Container(
           width: dayColWidth,
           height: rowHeight,
           decoration: pw.BoxDecoration(
-            color: (entry?.isHoliday ?? isWeekend) ? _weekendBg : _surface,
+            color: isHolidayCell ? _holidayGray : _surface,
             border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
           ),
         );
       }
 
       final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
-      final label = isPaidLeave ? ShiftCode.paidLeaveCode : entry.code;
-      // Solid, dark cell background with white text - a light background
-      // with dark text lost too much contrast when printed in monochrome
-      // (grayscale), making the shift-code symbols hard to read.
-      final cellBg = isPaidLeave ? _paidLeave : _primaryDeep;
+      // Prefer the numeric hour value ("4.25") over the internal letter code
+      // for display, matching the on-screen matrix's shift-code formatting.
+      final hoursValue = double.tryParse(entry.hours);
+      final label = isPaidLeave
+          ? ShiftCode.paidLeaveCode
+          : (hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.code);
 
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          color: cellBg,
+          color: isHolidayCell ? _holidayGray : _surface,
           border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
         ),
         child: pw.Text(
@@ -334,7 +323,7 @@ class ShiftMatrixPdfService {
           style: pw.TextStyle(
             font: boldFont,
             fontSize: fs(7.0),
-            color: PdfColors.white,
+            color: _ink,
           ),
         ),
       );
@@ -350,11 +339,7 @@ class ShiftMatrixPdfService {
         ),
         child: pw.Text(
           hours > 0 ? hours.toStringAsFixed(2) : '',
-          style: pw.TextStyle(
-            font: boldFont,
-            fontSize: fs(5.8),
-            color: _primaryDeep,
-          ),
+          style: pw.TextStyle(font: boldFont, fontSize: fs(5.8), color: _ink),
         ),
       );
     }
@@ -369,14 +354,14 @@ class ShiftMatrixPdfService {
           height: rowHeight,
           alignment: pw.Alignment.centerLeft,
           padding: const pw.EdgeInsets.symmetric(horizontal: 4),
-          color: _primaryDeep,
+          decoration: pw.BoxDecoration(
+            border: pw.Border(
+              bottom: pw.BorderSide(color: _primaryDeep, width: 1.0),
+            ),
+          ),
           child: pw.Text(
             '氏名',
-            style: pw.TextStyle(
-              font: boldFont,
-              fontSize: fs(7.2),
-              color: PdfColors.white,
-            ),
+            style: pw.TextStyle(font: boldFont, fontSize: fs(7.2), color: _ink),
           ),
         ),
         for (int i = 0; i < rows.length; i++)
@@ -404,18 +389,14 @@ class ShiftMatrixPdfService {
           alignment: pw.Alignment.centerLeft,
           padding: const pw.EdgeInsets.symmetric(horizontal: 4),
           decoration: pw.BoxDecoration(
-            color: _holidayBg,
+            color: _holidayGray,
             border: pw.Border(
               top: pw.BorderSide(color: _primaryDeep, width: 0.8),
             ),
           ),
           child: pw.Text(
             '合計',
-            style: pw.TextStyle(
-              font: boldFont,
-              fontSize: fs(6.6),
-              color: _primaryDeep,
-            ),
+            style: pw.TextStyle(font: boldFont, fontSize: fs(6.6), color: _ink),
           ),
         ),
       ],
@@ -468,7 +449,7 @@ class ShiftMatrixPdfService {
                     style: pw.TextStyle(
                       font: boldFont,
                       fontSize: fs(5.8),
-                      color: _primaryDeep,
+                      color: _ink,
                     ),
                   ),
                 ),
@@ -477,7 +458,7 @@ class ShiftMatrixPdfService {
           ),
         pw.Container(
           decoration: pw.BoxDecoration(
-            color: _holidayBg,
+            color: _holidayGray,
             border: pw.Border(
               top: pw.BorderSide(color: _primaryDeep, width: 0.8),
             ),
@@ -500,7 +481,7 @@ class ShiftMatrixPdfService {
                   style: pw.TextStyle(
                     font: boldFont,
                     fontSize: fs(6.4),
-                    color: _primaryDeep,
+                    color: _ink,
                   ),
                 ),
               ),
@@ -513,7 +494,7 @@ class ShiftMatrixPdfService {
                   style: pw.TextStyle(
                     font: boldFont,
                     fontSize: fs(5.8),
-                    color: _primaryDeep,
+                    color: _ink,
                   ),
                 ),
               ),

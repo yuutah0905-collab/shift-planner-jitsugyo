@@ -628,13 +628,18 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                 alignment: Alignment.centerLeft,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: const BoxDecoration(
-                  color: AppColors.primaryDeep,
-                  border: Border(right: BorderSide(color: Colors.white24)),
+                  border: Border(
+                    right: BorderSide(color: AppColors.line),
+                    bottom: BorderSide(
+                      color: AppColors.primaryDeep,
+                      width: 1.4,
+                    ),
+                  ),
                 ),
                 child: Text(
                   '氏名',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppColors.ink,
                     fontWeight: FontWeight.bold,
                     fontSize: 12 * _fontScale,
                   ),
@@ -726,7 +731,14 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   physics: const ClampingScrollPhysics(),
                   child: Container(
                     width: tableWidth,
-                    color: AppColors.primaryDeep,
+                    decoration: const BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppColors.primaryDeep,
+                          width: 1.4,
+                        ),
+                      ),
+                    ),
                     child: Row(
                       children: [
                         for (int day = 1; day <= _daysInMonth; day++)
@@ -767,15 +779,14 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
   Widget _headerDayCell(int day) {
     final dow = _weekdayOf(day);
-    final isWeekend = dow == 0 || dow == 6;
+    // No background tint / no weekday-specific text color anymore - name,
+    // date and weekday headers are all colorless with black text, matching
+    // the rest of the reworked matrix table.
     return Container(
       width: _dayColWidth,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: isWeekend
-            ? Colors.white.withValues(alpha: 0.12)
-            : Colors.transparent,
-        border: const Border(right: BorderSide(color: Colors.white24)),
+      decoration: const BoxDecoration(
+        border: Border(right: BorderSide(color: AppColors.line)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -783,21 +794,14 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
           Text(
             '$day',
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.ink,
               fontWeight: FontWeight.bold,
               fontSize: 12 * _fontScale,
             ),
           ),
           Text(
             _dowJp[dow],
-            style: TextStyle(
-              color: dow == 0
-                  ? Colors.pinkAccent.shade100
-                  : dow == 6
-                  ? Colors.lightBlueAccent.shade100
-                  : Colors.white70,
-              fontSize: 9 * _fontScale,
-            ),
+            style: TextStyle(color: AppColors.ink, fontSize: 9 * _fontScale),
           ),
         ],
       ),
@@ -809,14 +813,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       width: _totalColWidth,
       alignment: Alignment.center,
       decoration: const BoxDecoration(
-        color: Colors.black12,
-        border: Border(left: BorderSide(color: Colors.white24)),
+        border: Border(left: BorderSide(color: AppColors.line)),
       ),
       child: Text(
         label,
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: Colors.white,
+          color: AppColors.ink,
           fontWeight: FontWeight.bold,
           fontSize: 10 * _fontScale,
         ),
