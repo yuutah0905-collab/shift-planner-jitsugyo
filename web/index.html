@@ -92,36 +92,6 @@
   </div>
 
   <script>
-    // Only clear old service worker caches when the build actually changed,
-    // instead of on every single visit. Forcing a full re-download on every
-    // load was making repeat visits just as slow as the very first visit.
-    (function () {
-      var CURRENT_BUILD = '__BUILD_TS__';
-      var STORAGE_KEY = 'jitsugyo_build_ts';
-      try {
-        var lastBuild = window.localStorage.getItem(STORAGE_KEY);
-        if (lastBuild !== CURRENT_BUILD) {
-          if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function (registrations) {
-              for (var i = 0; i < registrations.length; i++) {
-                registrations[i].unregister();
-              }
-            });
-          }
-          if (window.caches && window.caches.keys) {
-            caches.keys().then(function (names) {
-              for (var i = 0; i < names.length; i++) {
-                caches.delete(names[i]);
-              }
-            });
-          }
-          window.localStorage.setItem(STORAGE_KEY, CURRENT_BUILD);
-        }
-      } catch (e) {
-        // localStorage unavailable (e.g. privacy mode) - fall back to no-op.
-      }
-    })();
-
     // Hide the loading splash once Flutter has attached its first frame.
     window.addEventListener('flutter-first-frame', function () {
       var splash = document.getElementById('loading-splash');
@@ -130,7 +100,104 @@
         setTimeout(function () { splash.remove(); }, 400);
       }
     });
+
+    // Only clear old service worker caches when the build actually changed,
+    // instead of on every single visit. Forcing a full re-download on every
+    // load was making repeat visits just as slow as the very first visit.
+    //
+    // IMPORTANT: unregister()/caches.delete() are async and do NOT take
+    // effect on the page that triggers them - a service worker that is
+    // already controlling this page keeps controlling it (and keeps
+    // intercepting fetches with its OLD cached files) until the page is
+    // reloaded/navigated. That means simply firing these calls and then
+    // immediately loading flutter_bootstrap.js via a static <script> tag
+    // (as before) let the STILL-ACTIVE old service worker intercept that
+    // very request and serve its stale cached main.dart.js/flutter_bootstrap.js
+    // - so the user kept seeing the OLD broken build even after we deployed
+    // a fix, and even though index.html itself was freshly fetched.
+    //
+    // Fix: flutter_bootstrap.js is no longer a static tag. We only inject it
+    // (dynamically, via document.createElement) after we are sure no old
+    // service worker cleanup is pending. If cleanup IS needed, we wait for it
+    // to finish and then force exactly one reload, so the retry happens with
+    // a clean slate before flutter_bootstrap.js is ever requested.
+    (function () {
+      var CURRENT_BUILD = '__BUILD_TS__';
+      var STORAGE_KEY = 'jitsugyo_build_ts';
+      var RELOAD_GUARD_KEY = 'jitsugyo_build_reload_guard';
+
+      function loadBootstrap() {
+        var s = document.createElement('script');
+        s.src = 'flutter_bootstrap.js?v=' + CURRENT_BUILD;
+        s.async = true;
+        document.body.appendChild(s);
+      }
+
+      try {
+        var lastBuild = window.localStorage.getItem(STORAGE_KEY);
+        if (lastBuild === CURRENT_BUILD) {
+          loadBootstrap();
+          return;
+        }
+
+        // Build changed (or first visit). Clean up any old service worker /
+        // caches first, then reload once so the next load starts clean.
+        var alreadyReloadedForThisBuild = window.sessionStorage.getItem(RELOAD_GUARD_KEY) === CURRENT_BUILD;
+        window.localStorage.setItem(STORAGE_KEY, CURRENT_BUILD);
+
+        if (alreadyReloadedForThisBuild) {
+          // We already reloaded once for this build (or reload/storage isn't
+          // working in this environment) - don't risk a reload loop, just
+          // proceed to load the app directly.
+          loadBootstrap();
+          return;
+        }
+
+        var cleanupTasks = [];
+        if ('serviceWorker' in navigator) {
+          cleanupTasks.push(
+            navigator.serviceWorker.getRegistrations().then(function (registrations) {
+              return Promise.all(registrations.map(function (r) { return r.unregister(); }));
+            }).catch(function () {})
+          );
+        }
+        if (window.caches && window.caches.keys) {
+          cleanupTasks.push(
+            caches.keys().then(function (names) {
+              return Promise.all(names.map(function (n) { return caches.delete(n); }));
+            }).catch(function () {})
+          );
+        }
+
+        if (cleanupTasks.length === 0) {
+          // No service worker / cache API available - nothing to clean, just load.
+          loadBootstrap();
+          return;
+        }
+
+        window.sessionStorage.setItem(RELOAD_GUARD_KEY, CURRENT_BUILD);
+        // Safety net: if cleanup somehow never settles, don't leave the user
+        // stuck forever - fall back to loading the app after 3s. Guard
+        // against both paths firing (fallback timeout AND cleanup finishing)
+        // by only acting once.
+        var settled = false;
+        var fallback = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          loadBootstrap();
+        }, 3000);
+        Promise.all(cleanupTasks).then(function () {
+          if (settled) return;
+          settled = true;
+          clearTimeout(fallback);
+          window.location.reload();
+        });
+      } catch (e) {
+        // localStorage/sessionStorage unavailable (e.g. privacy mode) - fall
+        // back to just loading the app directly.
+        loadBootstrap();
+      }
+    })();
   </script>
-  <script src="flutter_bootstrap.js?v=__BUILD_TS__" async></script>
 </body>
 </html>
