@@ -22,6 +22,15 @@ class AppColors {
   // printed in monochrome, but light enough that black text on top of it
   // still reads comfortably.
   static const Color holidayGray = Color(0xFFD9D9D9);
+  // Dedicated grid-line color for the monthly shift matrix table (both
+  // on-screen and PDF). Deliberately a bit darker than `line` above -
+  // `line` (0xFFD9D5D6) is nearly the same brightness as `holidayGray`
+  // (0xFFD9D9D9) and the light-blue paid-leave fill, so borders drawn in
+  // `line` become almost invisible once most cells got colored fills
+  // (gray for days off, light blue for paid leave). This stays a thin,
+  // subtle grid line but with enough contrast to stay visible on every
+  // cell background.
+  static const Color gridLine = Color(0xFFBFBBBC);
   static const Color sun = Color(0xFFC4275F);
   static const Color sat = Color(0xFF262425);
   static const Color success = Color(0xFF2A9D8F);

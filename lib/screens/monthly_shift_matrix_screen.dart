@@ -626,7 +626,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 decoration: const BoxDecoration(
                   border: Border(
-                    right: BorderSide(color: AppColors.line),
+                    top: BorderSide(color: AppColors.gridLine, width: 0.6),
+                    left: BorderSide(color: AppColors.gridLine, width: 0.6),
+                    right: BorderSide(color: AppColors.gridLine, width: 0.6),
                     bottom: BorderSide(
                       color: AppColors.primaryDeep,
                       width: 1.4,
@@ -657,12 +659,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                             color: i.isEven
                                 ? AppColors.surface
                                 : AppColors.background,
-                            border: const Border(
-                              right: BorderSide(color: AppColors.line),
-                              bottom: BorderSide(
-                                color: AppColors.line,
-                                width: 0.5,
-                              ),
+                            border: Border.all(
+                              color: AppColors.gridLine,
+                              width: 0.6,
                             ),
                           ),
                           child: Text(
@@ -684,7 +683,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         decoration: const BoxDecoration(
                           color: AppColors.holidayGray,
                           border: Border(
-                            right: BorderSide(color: AppColors.line),
+                            left: BorderSide(color: AppColors.gridLine, width: 0.6),
+                            right: BorderSide(color: AppColors.gridLine, width: 0.6),
+                            bottom: BorderSide(color: AppColors.gridLine, width: 0.6),
                             top: BorderSide(
                               color: AppColors.primaryDeep,
                               width: 1.4,
@@ -730,6 +731,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                     width: tableWidth,
                     decoration: const BoxDecoration(
                       border: Border(
+                        top: BorderSide(color: AppColors.gridLine, width: 0.6),
                         bottom: BorderSide(
                           color: AppColors.primaryDeep,
                           width: 1.4,
@@ -786,7 +788,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: isWeekend ? AppColors.holidayGray : Colors.transparent,
-        border: const Border(right: BorderSide(color: AppColors.line)),
+        border: const Border(
+          left: BorderSide(color: AppColors.gridLine, width: 0.5),
+          right: BorderSide(color: AppColors.gridLine, width: 0.5),
+        ),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -813,7 +818,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       width: _totalColWidth,
       alignment: Alignment.center,
       decoration: const BoxDecoration(
-        border: Border(left: BorderSide(color: AppColors.line)),
+        border: Border(left: BorderSide(color: AppColors.gridLine, width: 0.6)),
       ),
       child: Text(
         label,
@@ -834,7 +839,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       decoration: BoxDecoration(
         color: bg,
         border: const Border(
-          bottom: BorderSide(color: AppColors.line, width: 0.5),
+          bottom: BorderSide(color: AppColors.gridLine, width: 0.6),
         ),
       ),
       child: Row(
@@ -844,7 +849,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             width: _totalColWidth,
             alignment: Alignment.center,
             decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: AppColors.line)),
+              border: Border(left: BorderSide(color: AppColors.gridLine, width: 0.6)),
             ),
             child: Text(
               '${row.filledDaysCount}',
@@ -892,7 +897,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             width: _totalColWidth,
             alignment: Alignment.center,
             decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: AppColors.line)),
+              border: Border(left: BorderSide(color: AppColors.gridLine, width: 0.6)),
             ),
             // The grand-total attendance-day count in this corner cell is
             // not needed - left blank on purpose (per-employee counts in
@@ -921,7 +926,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       height: _rowHeight,
       alignment: Alignment.center,
       decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: AppColors.line, width: 0.4)),
+        border: Border(right: BorderSide(color: AppColors.gridLine, width: 0.6)),
       ),
       child: Text(
         hours > 0 ? hours.toStringAsFixed(2) : '',
@@ -949,9 +954,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       return Container(
         width: _dayColWidth,
         height: _rowHeight,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.holidayGray,
-          border: Border(right: BorderSide(color: AppColors.line, width: 0.4)),
+          border: Border.all(color: AppColors.gridLine, width: 0.5),
         ),
       );
     }
@@ -985,9 +990,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: cellColor,
-          border: const Border(
-            right: BorderSide(color: AppColors.line, width: 0.4),
-          ),
+          border: Border.all(color: AppColors.gridLine, width: 0.5),
         ),
         child: Stack(
           alignment: Alignment.center,

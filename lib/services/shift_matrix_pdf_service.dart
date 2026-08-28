@@ -48,6 +48,10 @@ class ShiftMatrixPdfService {
   static final _ink = PdfColor.fromInt(0xFF262425);
   static final _primaryDeep = PdfColor.fromInt(0xFFC4275F);
   static final _line = PdfColor.fromInt(0xFFD9D5D6);
+  // Dedicated grid-line color for the table cells - matches
+  // AppColors.gridLine on screen. Deliberately darker than _line above so
+  // borders stay visible against the gray/light-blue cell fills.
+  static final _gridLine = PdfColor.fromInt(0xFFBFBBBC);
   static final _holidayGray = PdfColor.fromInt(0xFFD9D9D9);
   static final _surface = PdfColor.fromInt(0xFFFFFFFF);
   static final _background = PdfColor.fromInt(0xFFFAFAFA);
@@ -311,7 +315,7 @@ class ShiftMatrixPdfService {
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
           color: isWeekend ? _holidayGray : null,
-          border: pw.Border(right: pw.BorderSide(color: _line, width: 0.4)),
+          border: pw.Border.all(color: _gridLine, width: 0.4),
         ),
         child: pw.Column(
           mainAxisAlignment: pw.MainAxisAlignment.center,
@@ -343,7 +347,7 @@ class ShiftMatrixPdfService {
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          border: pw.Border(left: pw.BorderSide(color: _line, width: 0.4)),
+          border: pw.Border.all(color: _gridLine, width: 0.4),
         ),
         padding: const pw.EdgeInsets.symmetric(horizontal: 1),
         child: pw.Text(
@@ -376,7 +380,7 @@ class ShiftMatrixPdfService {
           height: rowHeight,
           decoration: pw.BoxDecoration(
             color: _holidayGray,
-            border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
+            border: pw.Border.all(color: _gridLine, width: 0.4),
           ),
         );
       }
@@ -402,7 +406,7 @@ class ShiftMatrixPdfService {
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
           color: cellColor,
-          border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
+          border: pw.Border.all(color: _gridLine, width: 0.4),
         ),
         child: pw.Text(
           label,
@@ -421,7 +425,7 @@ class ShiftMatrixPdfService {
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
+          border: pw.Border.all(color: _gridLine, width: 0.4),
         ),
         child: pw.Text(
           hours > 0 ? hours.toStringAsFixed(2) : '',
@@ -442,6 +446,9 @@ class ShiftMatrixPdfService {
           padding: const pw.EdgeInsets.symmetric(horizontal: 4),
           decoration: pw.BoxDecoration(
             border: pw.Border(
+              top: pw.BorderSide(color: _gridLine, width: 0.4),
+              left: pw.BorderSide(color: _gridLine, width: 0.4),
+              right: pw.BorderSide(color: _gridLine, width: 0.4),
               bottom: pw.BorderSide(color: _primaryDeep, width: 1.0),
             ),
           ),
@@ -458,9 +465,7 @@ class ShiftMatrixPdfService {
             padding: const pw.EdgeInsets.symmetric(horizontal: 4),
             decoration: pw.BoxDecoration(
               color: i.isEven ? _surface : _background,
-              border: pw.Border(
-                bottom: pw.BorderSide(color: _line, width: 0.3),
-              ),
+              border: pw.Border.all(color: _gridLine, width: 0.4),
             ),
             child: pw.Text(
               rows[i].name,
@@ -477,6 +482,9 @@ class ShiftMatrixPdfService {
           decoration: pw.BoxDecoration(
             color: _holidayGray,
             border: pw.Border(
+              left: pw.BorderSide(color: _gridLine, width: 0.4),
+              right: pw.BorderSide(color: _gridLine, width: 0.4),
+              bottom: pw.BorderSide(color: _gridLine, width: 0.4),
               top: pw.BorderSide(color: _primaryDeep, width: 0.8),
             ),
           ),
@@ -497,6 +505,8 @@ class ShiftMatrixPdfService {
           children: [
             for (int day = 1; day <= daysInMonth; day++) headerDayCell(day),
             headerTotalCell('出勤\n日数'),
+            // NOTE: header total cells get a grid border via
+            // headerTotalCell() itself.
             headerTotalCell('時間\n(h)'),
           ],
         ),
@@ -504,9 +514,6 @@ class ShiftMatrixPdfService {
           pw.Container(
             decoration: pw.BoxDecoration(
               color: i.isEven ? _surface : _background,
-              border: pw.Border(
-                bottom: pw.BorderSide(color: _line, width: 0.3),
-              ),
             ),
             child: pw.Row(
               children: [
@@ -517,9 +524,7 @@ class ShiftMatrixPdfService {
                   height: rowHeight,
                   alignment: pw.Alignment.center,
                   decoration: pw.BoxDecoration(
-                    border: pw.Border(
-                      left: pw.BorderSide(color: _line, width: 0.4),
-                    ),
+                    border: pw.Border.all(color: _gridLine, width: 0.4),
                   ),
                   child: pw.Text(
                     '${rows[i].filledDaysCount}',
@@ -558,9 +563,7 @@ class ShiftMatrixPdfService {
                 height: rowHeight,
                 alignment: pw.Alignment.center,
                 decoration: pw.BoxDecoration(
-                  border: pw.Border(
-                    left: pw.BorderSide(color: _line, width: 0.4),
-                  ),
+                  border: pw.Border.all(color: _gridLine, width: 0.4),
                 ),
                 // The grand-total attendance-day count in this corner cell
                 // is not needed, matching the on-screen matrix - left
