@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -136,6 +137,25 @@ class ShiftMatrixPdfService {
     return result.isEmpty ? 'dept' : result;
   }
 
+  /// Test-only accessor for [_buildPdfBytes], so widget/unit tests can
+  /// inspect the raw generated PDF bytes directly.
+  @visibleForTesting
+  static Future<Uint8List> exportAndShareForTest({
+    required int year,
+    required int month,
+    required int daysInMonth,
+    required String department,
+    required List<ShiftMatrixPdfRow> rows,
+    String remarks = '',
+  }) => _buildPdfBytes(
+    year: year,
+    month: month,
+    daysInMonth: daysInMonth,
+    department: department,
+    rows: rows,
+    remarks: remarks,
+  );
+
   static Future<Uint8List> _buildPdfBytes({
     required int year,
     required int month,
@@ -161,21 +181,74 @@ class ShiftMatrixPdfService {
     const titleHeight = 22.0;
     const titleGap = 6.0;
 
-    // Reserve a fixed-height "備考" box at the bottom of the page,
-    // matching the on-screen remarks field, so the manually-typed notes
-    // are included in the printed/exported PDF too - only reserve the
-    // space (and shrink the table to fit) when there is actually
-    // something to show, so PDFs without remarks keep using the full
-    // page for the table exactly as before.
+    final printableWidth = landscape.width - margin * 2;
+
+    // Total vertical space inside the page margins. IMPORTANT: reserve a
+    // small safety buffer out of this before doing any height math below.
+    // Without it, the title + table + remarks heights are computed to sum
+    // to *exactly* this value with zero slack - and once the pdf package's
+    // actual font metrics/rounding are applied during real rendering, the
+    // true rendered height can come out a fraction of a point *larger*
+    // than this estimate. `pw.Page` uses a single, non-paginating
+    // `pw.Column`, so when that happens it doesn't error or wrap to a
+    // second page - it silently drops the last overflowing child (in
+    // practice, this made the whole "備考" box vanish for larger
+    // rows/remarks combinations). Reserving a few points of slack keeps
+    // the estimate comfortably under the real limit.
+    const pageSafetyMargin = 10.0;
+    final usableContentHeight = landscape.height - margin * 2 - pageSafetyMargin;
+
+    // Reserve a "備考" box at the bottom of the page, matching the
+    // on-screen remarks field, so the manually-typed notes are included in
+    // the printed/exported PDF too - only reserve the space (and shrink
+    // the table to fit) when there is actually something to show, so PDFs
+    // without remarks keep using the full page for the table exactly as
+    // before.
+    //
+    // IMPORTANT: the box height is NOT a fixed constant - a fixed 56pt box
+    // clipped remarks text after ~3 lines even when the on-screen field
+    // (which scrolls, so the user can freely type more) had 4+ lines
+    // typed into it. Instead, estimate how many lines the text will need
+    // once wrapped to `printableWidth` and size the box to fit all of it
+    // (up to a generous cap so extremely long remarks can't push the
+    // table off the page entirely).
     final hasRemarks = remarks.trim().isNotEmpty;
     const remarksGap = 6.0;
-    const remarksHeight = 56.0;
+    const remarksBoxPadding = 6.0;
+    const remarksLabelBlockHeight = 15.0; // "備考" label line + its gap
+    const remarksFontSize = 8.5;
+    const remarksLineHeight = remarksFontSize * 1.3; // font size + leading
+    const remarksMinHeight = 40.0;
+    double remarksHeight = 0.0;
+    if (hasRemarks) {
+      final textAreaWidth = printableWidth - remarksBoxPadding * 2;
+      // Conservative (worst-case) estimate: assume every character could
+      // be full-width (CJK), where glyph advance width is roughly equal to
+      // the font size - this slightly over-reserves space for mixed
+      // Japanese/ASCII text rather than risk under-reserving and clipping
+      // lines again.
+      final charsPerLine = (textAreaWidth / (remarksFontSize * 1.05))
+          .floor()
+          .clamp(8, 400);
+      var wrappedLineCount = 0;
+      for (final line in remarks.split('\n')) {
+        wrappedLineCount += line.isEmpty
+            ? 1
+            : (line.length / charsPerLine).ceil();
+      }
+      final textBlockHeight = wrappedLineCount * remarksLineHeight;
+      final maxRemarksHeight =
+          (usableContentHeight - titleHeight - titleGap) * 0.5;
+      remarksHeight =
+          (remarksLabelBlockHeight +
+                  textBlockHeight +
+                  remarksBoxPadding * 2)
+              .clamp(remarksMinHeight, maxRemarksHeight);
+    }
     final remarksBlockHeight = hasRemarks ? remarksGap + remarksHeight : 0.0;
 
-    final printableWidth = landscape.width - margin * 2;
     final availableTableHeight =
-        landscape.height -
-        margin * 2 -
+        usableContentHeight -
         titleHeight -
         titleGap -
         remarksBlockHeight;
@@ -228,11 +301,16 @@ class ShiftMatrixPdfService {
 
     pw.Widget headerDayCell(int day) {
       final dow = weekdayOf(day).toInt();
+      final isWeekend = dow == 0 || dow == 6;
+      // Weekend header cells get the same moderate holidayGray background
+      // as the data/footer cells below them, matching the on-screen matrix
+      // (a holiday column reads as one unbroken gray strip top to bottom).
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
+          color: isWeekend ? _holidayGray : null,
           border: pw.Border(right: pw.BorderSide(color: _line, width: 0.4)),
         ),
         child: pw.Column(

@@ -779,14 +779,17 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
   Widget _headerDayCell(int day) {
     final dow = _weekdayOf(day);
-    // No background tint / no weekday-specific text color anymore - name,
-    // date and weekday headers are all colorless with black text, matching
-    // the rest of the reworked matrix table.
+    final isWeekend = dow == 0 || dow == 6;
+    // Text is always plain black (no weekday-specific color), but weekend
+    // header cells still get the same moderate holidayGray background as
+    // the data/footer cells below them, so a holiday column reads as a
+    // single unbroken gray strip from the header all the way down.
     return Container(
       width: _dayColWidth,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: AppColors.line)),
+      decoration: BoxDecoration(
+        color: isWeekend ? AppColors.holidayGray : Colors.transparent,
+        border: const Border(right: BorderSide(color: AppColors.line)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
