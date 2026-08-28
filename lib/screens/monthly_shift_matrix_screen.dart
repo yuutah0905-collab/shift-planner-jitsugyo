@@ -225,6 +225,11 @@ class MonthlyShiftMatrixScreen extends StatefulWidget {
   final List<String> availableDepartments;
   final String initialDepartment; // '' = first available department
   final List<Employee> employees;
+  // true = part-time staff's read-only view (opened via "月間シフト一覧表を見る"
+  // on their own shift-request screen, after the admin has published this
+  // month's matrix). Hides admin-only actions (tap-to-edit-hours, PDF
+  // export, remarks editing, "シフト配布" toggle) so staff can only view.
+  final bool readOnly;
 
   const MonthlyShiftMatrixScreen({
     super.key,
@@ -233,6 +238,7 @@ class MonthlyShiftMatrixScreen extends StatefulWidget {
     required this.availableDepartments,
     this.initialDepartment = '',
     this.employees = const [],
+    this.readOnly = false,
   });
 
   @override
@@ -247,6 +253,11 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   late int _month;
   late int _daysInMonth;
   late Map<String, int> _rosterOrder;
+  // Whether this target month is currently published ("シフト配布") for
+  // part-time staff to view. Admin-only state, irrelevant in readOnly
+  // mode. Loaded from AppConfig.publishedMonth in initState.
+  bool _isPublished = false;
+  bool _publishLoading = false;
 
   // Vertical sync pair: fixed name column <-> data grid body.
   final ScrollController _nameVController = ScrollController();
@@ -379,6 +390,51 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
           _syncOffset(_bodyHController, _headerHController, isVertical: false),
     );
     _loadRemarks();
+    if (!widget.readOnly) _loadPublishedState();
+  }
+
+  /// Loads whether this target month is currently published, to show the
+  /// "シフト配布" button in the correct on/off state. Admin-only (never
+  /// called in readOnly mode, since staff don't see this button at all).
+  Future<void> _loadPublishedState() async {
+    final config = await _firestoreService.fetchConfig();
+    if (!mounted) return;
+    setState(() {
+      _isPublished = config.publishedMonth == widget.targetMonth;
+    });
+  }
+
+  /// Toggles "シフト配布" on/off for this target month: ON makes the
+  /// completed monthly shift matrix viewable (read-only) by part-time
+  /// staff from their own shift-request screen; OFF hides it again.
+  Future<void> _togglePublish() async {
+    setState(() => _publishLoading = true);
+    try {
+      final newValue = !_isPublished;
+      await _firestoreService.setPublishedMonth(
+        newValue ? widget.targetMonth : '',
+      );
+      if (!mounted) return;
+      setState(() {
+        _isPublished = newValue;
+        _publishLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            newValue
+                ? 'シフトを配布しました。パートさんの画面から見られるようになります。'
+                : 'シフトの配布を停止しました。',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _publishLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('配布状態の更新に失敗しました: $e')));
+    }
   }
 
   /// Local-storage key for the remarks text box, scoped to the currently
@@ -518,6 +574,54 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// total).
   double _grandTotalHours(List<_PersonRow> rows) =>
       rows.fold(0.0, (sum, r) => sum + r.totalHours);
+
+  /// Read-only memo viewer used only in [widget.readOnly] mode (part-time
+  /// staff's published view), where tapping a cell must never trigger an
+  /// edit - just let them read the memo the admin left, if any.
+  void _showMemoDialog(_PersonRow row, DayEntry entry, int day) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(
+              Icons.sticky_note_2_outlined,
+              color: AppColors.success,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                row.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              row.department.isNotEmpty
+                  ? '${row.department} ・ $_month月$day日'
+                  : '$_month月$day日',
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+            const SizedBox(height: 12),
+            Text(entry.memo, style: const TextStyle(fontSize: 14, height: 1.4)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
 
   /// Opens the manual hour-correction bottom sheet for [row]'s entry on
   /// [day], applies the admin's change to the in-memory `DayEntry`
@@ -661,20 +765,55 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       appBar: AppBar(
         title: const Text('月間シフト一覧表'),
         actions: [
-          IconButton(
-            tooltip: 'PDF出力（A4横1ページ）',
-            onPressed: rows.isEmpty || _isExportingPdf ? null : _exportPdf,
-            icon: _isExportingPdf
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          if (!widget.readOnly)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+              child: _publishLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: _togglePublish,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: _isPublished
+                            ? AppColors.success
+                            : Colors.transparent,
+                        side: const BorderSide(color: Colors.white),
+                      ),
+                      icon: Icon(
+                        _isPublished
+                            ? Icons.check_circle_outline
+                            : Icons.campaign_outlined,
+                        size: 18,
+                      ),
+                      label: Text(_isPublished ? '配布中' : 'シフト配布'),
                     ),
-                  )
-                : const Icon(Icons.picture_as_pdf_outlined),
-          ),
+            ),
+          if (!widget.readOnly)
+            IconButton(
+              tooltip: 'PDF出力（A4横1ページ）',
+              onPressed: rows.isEmpty || _isExportingPdf ? null : _exportPdf,
+              icon: _isExportingPdf
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    )
+                  : const Icon(Icons.picture_as_pdf_outlined),
+            ),
         ],
       ),
       body: SafeArea(
@@ -716,7 +855,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップで時間を修正 ・ 最下部の「合計」行はその日の全員の合計時間',
+                      widget.readOnly
+                          ? '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ 最下部の「合計」行はその日の全員の合計時間'
+                          : '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップで時間を修正 ・ 最下部の「合計」行はその日の全員の合計時間',
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.inkMute,
@@ -753,7 +894,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       },
                     ),
             ),
-            _buildRemarksSection(),
+            if (!widget.readOnly) _buildRemarksSection(),
           ],
         ),
       ),
@@ -1203,9 +1344,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         : ((isBlank || isHolidayCell) ? AppColors.holidayGray : Colors.transparent);
 
     // Every cell (including blank ones) is tappable so the admin can
-    // manually correct/enter the day's hours by hand.
+    // manually correct/enter the day's hours by hand. In readOnly mode
+    // (part-time staff's published view), cells are not editable - only
+    // a memo (if any) can be viewed.
     return InkWell(
-      onTap: () => _editHours(row, day),
+      onTap: widget.readOnly
+          ? (hasMemo ? () => _showMemoDialog(row, entry, day) : null)
+          : () => _editHours(row, day),
       child: Container(
         width: _dayColWidth,
         height: _rowHeight,

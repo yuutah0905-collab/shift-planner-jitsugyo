@@ -39,6 +39,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   List<String> _departments = [];
   List<Employee> _employees = [];
   String? _empDept;
+  // Carried through unchanged from the loaded config - this screen has no
+  // UI for it (it's toggled from the monthly shift matrix screen's
+  // "シフト配布" button instead), but _save() must still preserve it
+  // rather than silently resetting it to '' on every settings save.
+  String _publishedMonth = '';
 
   static const List<String> _dow = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -86,6 +91,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       _holidays = List<String>.from(config.holidays);
       _departments = List<String>.from(config.departments);
       _employees = List<Employee>.from(config.employees);
+      _publishedMonth = config.publishedMonth;
       // 既存メンバーでPINが未設定の人には、考える手間をなくすため
       // 自動でランダムな4桁PINを割り当てる（保存を押すまでは確定しない）。
       final missing = _employees.where((e) => e.pin.isEmpty).length;
@@ -371,6 +377,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             ? 'shift2024'
             : _passwordController.text.trim(),
         employees: _employees,
+        publishedMonth: _publishedMonth,
       );
       await _firestoreService.updateConfig(config);
       if (mounted) {

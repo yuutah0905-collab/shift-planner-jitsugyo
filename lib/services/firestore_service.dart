@@ -166,6 +166,17 @@ class FirestoreService {
       'departments': config.departments,
       'adminPassword': config.adminPassword,
       'employees': config.employees.map((e) => e.toMap()).toList(),
+      'publishedMonth': config.publishedMonth,
+    }, SetOptions(merge: true));
+  }
+
+  /// Toggles the "シフト配布" (publish) flag for the monthly shift matrix,
+  /// used by the admin's monthly shift matrix screen. Only touches the
+  /// `publishedMonth` field so it never clobbers any other config value
+  /// that may have been edited concurrently on the settings screen.
+  Future<void> setPublishedMonth(String targetMonth) async {
+    await _db.collection('app_settings').doc('config').set({
+      'publishedMonth': targetMonth,
     }, SetOptions(merge: true));
   }
 }
