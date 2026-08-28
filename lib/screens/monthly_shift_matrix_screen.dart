@@ -337,9 +337,6 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   double _grandTotalHours(List<_PersonRow> rows) =>
       rows.fold(0.0, (sum, r) => sum + r.totalHours);
 
-  int _grandTotalFilledDays(List<_PersonRow> rows) =>
-      rows.fold(0, (sum, r) => sum + r.filledDaysCount);
-
   void _showMemoDialog(_PersonRow row, DayEntry entry, int day) {
     showDialog(
       context: context,
@@ -897,14 +894,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             decoration: const BoxDecoration(
               border: Border(left: BorderSide(color: AppColors.line)),
             ),
-            child: Text(
-              '${_grandTotalFilledDays(rows)}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12 * _fontScale,
-                color: AppColors.ink,
-              ),
-            ),
+            // The grand-total attendance-day count in this corner cell is
+            // not needed - left blank on purpose (per-employee counts in
+            // the rows above are unaffected).
           ),
           Container(
             width: _totalColWidth,
@@ -951,17 +943,15 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final isHolidayCell = entry?.isHoliday ?? isWeekend;
 
     if (entry == null || (entry.hours.isEmpty && entry.code.isEmpty)) {
-      // Blank cell - still shade weekends/holidays with a moderate gray so
-      // day-off columns stay clearly readable (incl. when printed/viewed
-      // in monochrome), without being so dark it looks like a filled cell.
+      // Blank cell = that person is off that day, so always shade it with
+      // the same moderate gray regardless of weekday - not just on
+      // weekends/holidays - so every day-off cell reads consistently.
       return Container(
         width: _dayColWidth,
         height: _rowHeight,
-        decoration: BoxDecoration(
-          color: isHolidayCell ? AppColors.holidayGray : Colors.transparent,
-          border: const Border(
-            right: BorderSide(color: AppColors.line, width: 0.4),
-          ),
+        decoration: const BoxDecoration(
+          color: AppColors.holidayGray,
+          border: Border(right: BorderSide(color: AppColors.line, width: 0.4)),
         ),
       );
     }
@@ -980,6 +970,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               ? hoursValue.toStringAsFixed(2)
               : entry.code);
 
+    // Paid leave gets a distinct light-blue fill so it stands out clearly
+    // from a normal work shift; otherwise fall back to the moderate gray
+    // for weekend/holiday cells, or plain white for a normal work day.
+    final Color cellColor = isPaidLeave
+        ? AppColors.paidLeaveBg
+        : (isHolidayCell ? AppColors.holidayGray : Colors.transparent);
+
     return InkWell(
       onTap: hasMemo ? () => _showMemoDialog(row, entry, day) : null,
       child: Container(
@@ -987,9 +984,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         height: _rowHeight,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          // No colored fill for shift cells anymore - plain white/gray
-          // background with black text, matching the reference table.
-          color: isHolidayCell ? AppColors.holidayGray : Colors.transparent,
+          color: cellColor,
           border: const Border(
             right: BorderSide(color: AppColors.line, width: 0.4),
           ),

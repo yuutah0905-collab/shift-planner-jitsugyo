@@ -51,6 +51,10 @@ class ShiftMatrixPdfService {
   static final _holidayGray = PdfColor.fromInt(0xFFD9D9D9);
   static final _surface = PdfColor.fromInt(0xFFFFFFFF);
   static final _background = PdfColor.fromInt(0xFFFAFAFA);
+  // Paid leave (有給) cell fill - light blue, mirrors
+  // AppColors.paidLeaveBg on screen so it stands out from a normal
+  // gray/white shift cell.
+  static final _paidLeaveBg = PdfColor.fromInt(0xFFE3F3FA);
 
   /// Opens the platform print/preview sheet (Web: browser print dialog with
   /// a "Save as PDF" destination; Android: native print/share sheet) so the
@@ -294,10 +298,6 @@ class ShiftMatrixPdfService {
     }
 
     final grandTotalHours = rows.fold<double>(0.0, (s, r) => s + r.totalHours);
-    final grandTotalDays = rows.fold<int>(
-      0,
-      (s, r) => s + r.filledDaysCount,
-    );
 
     pw.Widget headerDayCell(int day) {
       final dow = weekdayOf(day).toInt();
@@ -368,13 +368,14 @@ class ShiftMatrixPdfService {
       final isHolidayCell = (entry?.isHoliday ?? isWeekend);
 
       if (entry == null || (entry.hours.isEmpty && entry.code.isEmpty)) {
-        // No colored fill for shift cells - plain white/gray background
-        // with black text, matching the on-screen matrix.
+        // Blank cell = that person is off that day - always shade it with
+        // the same moderate gray regardless of weekday, matching the
+        // on-screen matrix.
         return pw.Container(
           width: dayColWidth,
           height: rowHeight,
           decoration: pw.BoxDecoration(
-            color: isHolidayCell ? _holidayGray : _surface,
+            color: _holidayGray,
             border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
           ),
         );
@@ -388,12 +389,19 @@ class ShiftMatrixPdfService {
           ? ShiftCode.paidLeaveCode
           : (hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.code);
 
+      // Paid leave gets a distinct light-blue fill, matching the on-screen
+      // matrix; otherwise fall back to the moderate gray for
+      // weekend/holiday cells, or plain white for a normal work day.
+      final cellColor = isPaidLeave
+          ? _paidLeaveBg
+          : (isHolidayCell ? _holidayGray : _surface);
+
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
-          color: isHolidayCell ? _holidayGray : _surface,
+          color: cellColor,
           border: pw.Border(right: pw.BorderSide(color: _line, width: 0.3)),
         ),
         child: pw.Text(
@@ -554,14 +562,9 @@ class ShiftMatrixPdfService {
                     left: pw.BorderSide(color: _line, width: 0.4),
                   ),
                 ),
-                child: pw.Text(
-                  '$grandTotalDays',
-                  style: pw.TextStyle(
-                    font: boldFont,
-                    fontSize: fs(6.4),
-                    color: _ink,
-                  ),
-                ),
+                // The grand-total attendance-day count in this corner cell
+                // is not needed, matching the on-screen matrix - left
+                // blank on purpose.
               ),
               pw.Container(
                 width: totalColWidth,
