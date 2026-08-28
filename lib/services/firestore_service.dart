@@ -179,4 +179,50 @@ class FirestoreService {
       'publishedMonth': targetMonth,
     }, SetOptions(merge: true));
   }
+
+  /// Doc id for the monthly shift matrix's "備考" (remarks) free-text
+  /// box, scoped to one target month + department so different
+  /// departments/months don't share the same note.
+  String _remarksDocId(String targetMonth, String department) =>
+      '${targetMonth}_$department';
+
+  /// Fetches the admin-written remarks text for the monthly shift matrix
+  /// (target month + department), used both by the admin's editable view
+  /// and by part-time staff's read-only published view - stored in
+  /// Firestore (not local shared_preferences) precisely so it's visible
+  /// across devices once "シフト配布" is turned on.
+  Future<String> fetchMatrixRemarks(
+    String targetMonth,
+    String department,
+  ) async {
+    try {
+      final doc = await _db
+          .collection('matrix_remarks')
+          .doc(_remarksDocId(targetMonth, department))
+          .get()
+          .timeout(const Duration(seconds: 8));
+      if (doc.exists && doc.data() != null) {
+        return doc.data()!['text']?.toString() ?? '';
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('fetchMatrixRemarks error: $e');
+    }
+    return '';
+  }
+
+  /// Saves the admin-written remarks text for the monthly shift matrix.
+  Future<void> saveMatrixRemarks(
+    String targetMonth,
+    String department,
+    String text,
+  ) async {
+    await _db
+        .collection('matrix_remarks')
+        .doc(_remarksDocId(targetMonth, department))
+        .set({
+          'targetMonth': targetMonth,
+          'department': department,
+          'text': text,
+        }, SetOptions(merge: true));
+  }
 }

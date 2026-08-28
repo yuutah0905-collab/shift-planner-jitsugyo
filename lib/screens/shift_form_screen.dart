@@ -12,6 +12,7 @@ import '../widgets/day_cell.dart';
 import '../widgets/summary_card.dart';
 import 'admin_login_screen.dart';
 import 'help_screen.dart';
+import 'monthly_shift_matrix_screen.dart';
 
 const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 const List<String> _dowJpHeader = ['日', '月', '火', '水', '木', '金', '土'];
@@ -375,6 +376,49 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// Opens the admin-published monthly shift matrix in read-only mode, so
+  /// part-time staff can see everyone's confirmed shift for the target
+  /// month. Fetches the full submission list for the month fresh (this
+  /// screen only tracks the current user's own days, not everyone's), so
+  /// there's a brief loading spinner while that request is in flight.
+  Future<void> _openMonthlyMatrix() async {
+    if (_config == null) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) =>
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
+    try {
+      final submissions = await _firestoreService.fetchSubmissionsForMonth(
+        _config!.targetMonth,
+      );
+      final departments = <String>{
+        ..._config!.departments,
+        for (final s in submissions)
+          if (s.department.isNotEmpty) s.department,
+      }.toList();
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading dialog
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => MonthlyShiftMatrixScreen(
+            submissions: submissions,
+            targetMonth: _config!.targetMonth,
+            availableDepartments: departments,
+            initialDepartment: _selectedDepartment ?? '',
+            employees: _config!.employees,
+            readOnly: true,
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(); // close loading dialog
+      _showSnack('一覧表の取得に失敗しました');
+    }
+  }
+
   void _showSuccessDialog() {
     showDialog(
       context: context,
@@ -473,6 +517,52 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (config.publishedMonth == config.targetMonth &&
+                          config.publishedMonth.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.success.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: _openMonthlyMatrix,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.table_chart_outlined,
+                                      color: AppColors.success,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Expanded(
+                                      child: Text(
+                                        'シフトが確定しました。月間シフト一覧表を見る',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.success,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      color: AppColors.success,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       if (config.notice.isNotEmpty ||
                           config.deadline.isNotEmpty)
                         Container(

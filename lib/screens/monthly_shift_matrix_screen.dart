@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/day_entry.dart';
 import '../models/employee.dart';
 import '../models/shift_code.dart';
@@ -271,9 +270,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
   // Free-typed "備考" (remarks) notes at the bottom of the matrix, matching
   // the paper/Excel shift table's bottom remarks section (per-employee
-  // free-text notes about date/time exceptions, etc). Saved locally per
-  // target month + department, since there's no dedicated backend field
-  // for this yet.
+  // free-text notes about date/time exceptions, etc). Stored in Firestore
+  // (matrix_remarks/{targetMonth}_{department}) - not local-only - so
+  // part-time staff can see the same note in their read-only published
+  // view once "シフト配布" is turned on.
   final TextEditingController _remarksController = TextEditingController();
   Timer? _remarksSaveDebounce;
   bool _remarksLoaded = false;
@@ -437,25 +437,25 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     }
   }
 
-  /// Local-storage key for the remarks text box, scoped to the currently
-  /// selected target month + department so switching tabs shows the right
-  /// notes instead of mixing departments together.
-  String get _remarksStorageKey =>
-      'shift_matrix_remarks_v1_${widget.targetMonth}_$_selectedDepartment';
-
   Future<void> _loadRemarks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_remarksStorageKey) ?? '';
+    final saved = await _firestoreService.fetchMatrixRemarks(
+      widget.targetMonth,
+      _selectedDepartment,
+    );
     if (!mounted) return;
     _remarksController.text = saved;
     _remarksLoaded = true;
+    setState(() {});
   }
 
   void _onRemarksChanged(String value) {
     _remarksSaveDebounce?.cancel();
     _remarksSaveDebounce = Timer(const Duration(milliseconds: 500), () async {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_remarksStorageKey, value);
+      await _firestoreService.saveMatrixRemarks(
+        widget.targetMonth,
+        _selectedDepartment,
+        value,
+      );
     });
   }
 
@@ -894,7 +894,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       },
                     ),
             ),
-            if (!widget.readOnly) _buildRemarksSection(),
+            _buildRemarksSection(),
           ],
         ),
       ),
@@ -905,8 +905,14 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// matching the "備考" section at the bottom of the paper/Excel shift
   /// table (per-employee free-text notes about date/time exceptions,
   /// etc). Manually typed by the admin - not auto-generated from the
-  /// shift data above.
+  /// shift data above. In [widget.readOnly] mode (part-time staff's
+  /// published view), this becomes a plain read-only text display -
+  /// hidden entirely if the admin hasn't written anything, so staff
+  /// don't see an empty box with no purpose.
   Widget _buildRemarksSection() {
+    if (widget.readOnly && _remarksController.text.trim().isEmpty) {
+      return const SizedBox.shrink();
+    }
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
@@ -931,30 +937,45 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             ],
           ),
           const SizedBox(height: 6),
-          TextField(
-            controller: _remarksController,
-            enabled: _remarksLoaded,
-            onChanged: _onRemarksChanged,
-            maxLines: 4,
-            minLines: 3,
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: '例）米下さん 9/1,2,3【9:00〜15:30】 9/7【8:30〜14:30】…',
-              hintStyle: const TextStyle(
-                fontSize: 12,
-                color: AppColors.inkMute,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 10,
-                vertical: 8,
-              ),
-              border: OutlineInputBorder(
+          if (widget.readOnly)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.background,
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppColors.line),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Text(
+                _remarksController.text,
+                style: const TextStyle(fontSize: 13, height: 1.4),
+              ),
+            )
+          else
+            TextField(
+              controller: _remarksController,
+              enabled: _remarksLoaded,
+              onChanged: _onRemarksChanged,
+              maxLines: 4,
+              minLines: 3,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '例）米下さん 9/1,2,3【9:00〜15:30】 9/7【8:30〜14:30】…',
+                hintStyle: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.inkMute,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: AppColors.line),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
