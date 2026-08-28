@@ -377,12 +377,17 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   }
 
   /// Opens the admin-published monthly shift matrix in read-only mode, so
-  /// part-time staff can see everyone's confirmed shift for the target
-  /// month. Fetches the full submission list for the month fresh (this
-  /// screen only tracks the current user's own days, not everyone's), so
-  /// there's a brief loading spinner while that request is in flight.
+  /// part-time staff can see their OWN department's confirmed shift for
+  /// the target month. Publishing is per-department (each department has
+  /// its own admin/manager), so this fetches the full submission list for
+  /// the month, then narrows both the submissions AND the department-tab
+  /// list down to just [_selectedDepartment] - staff cannot switch tabs
+  /// to view other departments' shift matrices. There's a brief loading
+  /// spinner while the fetch request is in flight.
   Future<void> _openMonthlyMatrix() async {
     if (_config == null) return;
+    final dept = _selectedDepartment;
+    if (dept == null || dept.isEmpty) return;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -390,14 +395,12 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           const Center(child: CircularProgressIndicator(color: Colors.white)),
     );
     try {
-      final submissions = await _firestoreService.fetchSubmissionsForMonth(
+      final allSubmissions = await _firestoreService.fetchSubmissionsForMonth(
         _config!.targetMonth,
       );
-      final departments = <String>{
-        ..._config!.departments,
-        for (final s in submissions)
-          if (s.department.isNotEmpty) s.department,
-      }.toList();
+      final submissions = allSubmissions
+          .where((s) => s.department == dept)
+          .toList();
       if (!mounted) return;
       Navigator.of(context).pop(); // close loading dialog
       Navigator.of(context).push(
@@ -405,8 +408,8 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           builder: (_) => MonthlyShiftMatrixScreen(
             submissions: submissions,
             targetMonth: _config!.targetMonth,
-            availableDepartments: departments,
-            initialDepartment: _selectedDepartment ?? '',
+            availableDepartments: [dept],
+            initialDepartment: dept,
             employees: _config!.employees,
             readOnly: true,
           ),
@@ -517,8 +520,9 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (config.publishedMonth == config.targetMonth &&
-                          config.publishedMonth.isNotEmpty)
+                      if (_selectedDepartment != null &&
+                          _selectedDepartment!.isNotEmpty &&
+                          config.isDepartmentPublished(_selectedDepartment!))
                         Container(
                           width: double.infinity,
                           margin: const EdgeInsets.only(bottom: 12),

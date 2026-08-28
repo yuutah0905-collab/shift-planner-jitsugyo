@@ -12,14 +12,15 @@ class AppConfig {
   // who has NOT yet submitted their shift request for the target month.
   // Optional feature: if empty, the "未提出者" admin section is hidden.
   final List<Employee> employees;
-  // "YYYY-MM" of the target month whose completed monthly shift matrix
-  // the admin has published ("シフト配布") for part-time staff to view
-  // from their own shift-request screen. Empty = nothing published yet.
-  // Only ever set to the CURRENT `targetMonth` by the publish toggle on
-  // the matrix screen, but kept as a separate field (rather than a bool)
-  // so a stale publish doesn't silently carry over once the admin moves
-  // on to configuring next month's target month.
-  final String publishedMonth;
+  // Per-department "シフト配布" (publish) state: department name -> the
+  // "YYYY-MM" target month whose completed monthly shift matrix the
+  // admin has published for that department's part-time staff to view
+  // from their own shift-request screen. A department not present in
+  // this map (or whose value != the current `targetMonth`) is treated
+  // as not published. Kept per-department (rather than one app-wide
+  // flag) because each department has its own admin/manager who
+  // publishes independently of the others.
+  final Map<String, String> publishedDepartments;
 
   AppConfig({
     required this.targetMonth,
@@ -29,7 +30,7 @@ class AppConfig {
     required this.departments,
     required this.adminPassword,
     this.employees = const [],
-    this.publishedMonth = '',
+    this.publishedDepartments = const {},
   });
 
   factory AppConfig.fromMap(Map<String, dynamic> map) => AppConfig(
@@ -46,7 +47,10 @@ class AppConfig {
     employees: (map['employees'] as List<dynamic>? ?? [])
         .map((e) => Employee.fromMap(Map<String, dynamic>.from(e as Map)))
         .toList(),
-    publishedMonth: map['publishedMonth']?.toString() ?? '',
+    publishedDepartments:
+        (map['publishedDepartments'] as Map<dynamic, dynamic>? ?? {}).map(
+          (k, v) => MapEntry(k.toString(), v.toString()),
+        ),
   );
 
   AppConfig copyWith({
@@ -57,7 +61,7 @@ class AppConfig {
     List<String>? departments,
     String? adminPassword,
     List<Employee>? employees,
-    String? publishedMonth,
+    Map<String, String>? publishedDepartments,
   }) {
     return AppConfig(
       targetMonth: targetMonth ?? this.targetMonth,
@@ -67,9 +71,16 @@ class AppConfig {
       departments: departments ?? this.departments,
       adminPassword: adminPassword ?? this.adminPassword,
       employees: employees ?? this.employees,
-      publishedMonth: publishedMonth ?? this.publishedMonth,
+      publishedDepartments: publishedDepartments ?? this.publishedDepartments,
     );
   }
+
+  /// True if [department] currently has its monthly shift matrix
+  /// published for THIS config's `targetMonth` (i.e. still current, not
+  /// a stale publish left over from a previous target month).
+  bool isDepartmentPublished(String department) =>
+      publishedDepartments[department] == targetMonth &&
+      targetMonth.isNotEmpty;
 
   static AppConfig fallback() {
     final now = DateTime.now();
@@ -86,7 +97,7 @@ class AppConfig {
       departments: ['出庫', '入庫', '小分け', '梱包', 'その他'],
       adminPassword: 'shift2024',
       employees: [],
-      publishedMonth: '',
+      publishedDepartments: {},
     );
   }
 }

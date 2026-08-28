@@ -166,18 +166,34 @@ class FirestoreService {
       'departments': config.departments,
       'adminPassword': config.adminPassword,
       'employees': config.employees.map((e) => e.toMap()).toList(),
-      'publishedMonth': config.publishedMonth,
+      'publishedDepartments': config.publishedDepartments,
     }, SetOptions(merge: true));
   }
 
-  /// Toggles the "シフト配布" (publish) flag for the monthly shift matrix,
-  /// used by the admin's monthly shift matrix screen. Only touches the
-  /// `publishedMonth` field so it never clobbers any other config value
-  /// that may have been edited concurrently on the settings screen.
-  Future<void> setPublishedMonth(String targetMonth) async {
-    await _db.collection('app_settings').doc('config').set({
-      'publishedMonth': targetMonth,
-    }, SetOptions(merge: true));
+  /// Toggles the "シフト配布" (publish) flag for a single [department]'s
+  /// monthly shift matrix, used by the admin's monthly shift matrix screen.
+  /// Each department has its own admin/manager, so publishing is scoped
+  /// per-department (not a single app-wide flag): only the map entry for
+  /// [department] is touched via dot-notation `update()`, so other
+  /// departments' publish states and any other config field are never
+  /// clobbered by a concurrent edit on the settings screen.
+  Future<void> setDepartmentPublished(
+    String department,
+    bool published,
+    String targetMonth,
+  ) async {
+    final docRef = _db.collection('app_settings').doc('config');
+    if (published) {
+      await docRef.set({
+        'publishedDepartments': {department: targetMonth},
+      }, SetOptions(merge: true));
+    } else {
+      // Dot-notation update() to remove just this one map key without
+      // needing to read the doc first or touching sibling departments.
+      await docRef.update({
+        'publishedDepartments.$department': FieldValue.delete(),
+      });
+    }
   }
 
   /// Doc id for the monthly shift matrix's "備考" (remarks) free-text

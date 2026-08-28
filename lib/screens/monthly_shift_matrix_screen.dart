@@ -252,9 +252,12 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   late int _month;
   late int _daysInMonth;
   late Map<String, int> _rosterOrder;
-  // Whether this target month is currently published ("シフト配布") for
-  // part-time staff to view. Admin-only state, irrelevant in readOnly
-  // mode. Loaded from AppConfig.publishedMonth in initState.
+  // Whether the currently selected department is published ("シフト配布")
+  // for this target month, for part-time staff of that department to
+  // view. Admin-only state, irrelevant in readOnly mode. Per-department
+  // (each department has its own admin/manager), re-loaded whenever the
+  // selected department tab changes. Loaded from
+  // AppConfig.publishedDepartments in initState / _switchDepartment.
   bool _isPublished = false;
   bool _publishLoading = false;
 
@@ -393,26 +396,38 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     if (!widget.readOnly) _loadPublishedState();
   }
 
-  /// Loads whether this target month is currently published, to show the
-  /// "シフト配布" button in the correct on/off state. Admin-only (never
-  /// called in readOnly mode, since staff don't see this button at all).
+  /// Loads whether the CURRENTLY SELECTED department is published for
+  /// this target month, to show the "シフト配布" button in the correct
+  /// on/off state. Publishing is per-department (each department has its
+  /// own admin/manager), so this is re-run every time the admin switches
+  /// department tabs via [_switchDepartment]. Admin-only (never called in
+  /// readOnly mode, since staff don't see this button at all).
   Future<void> _loadPublishedState() async {
+    if (_selectedDepartment.isEmpty) {
+      if (mounted) setState(() => _isPublished = false);
+      return;
+    }
     final config = await _firestoreService.fetchConfig();
     if (!mounted) return;
     setState(() {
-      _isPublished = config.publishedMonth == widget.targetMonth;
+      _isPublished = config.isDepartmentPublished(_selectedDepartment);
     });
   }
 
-  /// Toggles "シフト配布" on/off for this target month: ON makes the
-  /// completed monthly shift matrix viewable (read-only) by part-time
-  /// staff from their own shift-request screen; OFF hides it again.
+  /// Toggles "シフト配布" on/off for the CURRENTLY SELECTED department only:
+  /// ON makes that department's completed monthly shift matrix viewable
+  /// (read-only) by that department's part-time staff from their own
+  /// shift-request screen; OFF hides it again. Other departments' publish
+  /// states are untouched.
   Future<void> _togglePublish() async {
+    if (_selectedDepartment.isEmpty) return;
     setState(() => _publishLoading = true);
     try {
       final newValue = !_isPublished;
-      await _firestoreService.setPublishedMonth(
-        newValue ? widget.targetMonth : '',
+      await _firestoreService.setDepartmentPublished(
+        _selectedDepartment,
+        newValue,
+        widget.targetMonth,
       );
       if (!mounted) return;
       setState(() {
@@ -423,8 +438,8 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         SnackBar(
           content: Text(
             newValue
-                ? 'シフトを配布しました。パートさんの画面から見られるようになります。'
-                : 'シフトの配布を停止しました。',
+                ? '$_selectedDepartmentのシフトを配布しました。パートさんの画面から見られるようになります。'
+                : '$_selectedDepartmentのシフトの配布を停止しました。',
           ),
         ),
       );
@@ -463,6 +478,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     setState(() => _selectedDepartment = department);
     _remarksLoaded = false;
     await _loadRemarks();
+    if (!widget.readOnly) await _loadPublishedState();
     if (mounted) setState(() {});
   }
 
@@ -765,7 +781,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       appBar: AppBar(
         title: const Text('月間シフト一覧表'),
         actions: [
-          if (!widget.readOnly)
+          if (!widget.readOnly && _selectedDepartment.isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
               child: _publishLoading
@@ -794,7 +810,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                             : Icons.campaign_outlined,
                         size: 18,
                       ),
-                      label: Text(_isPublished ? '配布中' : 'シフト配布'),
+                      label: Text(
+                        _isPublished ? '$_selectedDepartment 配布中' : 'シフト配布',
+                      ),
                     ),
             ),
           if (!widget.readOnly)
