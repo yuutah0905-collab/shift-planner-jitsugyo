@@ -7,9 +7,21 @@ class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   /// Fetch app-wide config (target month, holidays, deadline, notice, etc.)
+  ///
+  /// IMPORTANT: bounded with a timeout. Without one, a flaky/unreachable
+  /// network path to the Firestore backend (which uses a long-lived
+  /// WebChannel/streaming connection, not a plain quick HTTP request) can
+  /// leave the returned Future neither resolved nor rejected for a very
+  /// long time - which showed up as the app being stuck on the loading
+  /// splash screen forever, since the try/catch here never even got a
+  /// chance to run (nothing was thrown yet, the await just never returned).
   Future<AppConfig> fetchConfig() async {
     try {
-      final doc = await _db.collection('app_settings').doc('config').get();
+      final doc = await _db
+          .collection('app_settings')
+          .doc('config')
+          .get(const GetOptions(source: Source.serverAndCache))
+          .timeout(const Duration(seconds: 8));
       if (doc.exists && doc.data() != null) {
         return AppConfig.fromMap(doc.data()!);
       }
