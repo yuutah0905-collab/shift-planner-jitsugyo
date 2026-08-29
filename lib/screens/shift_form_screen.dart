@@ -828,122 +828,6 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                '自分の給料計算（任意）',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primaryDeep,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                '時給を入力すると、今月の希望時間から給料を自動計算します。'
-                                '入力した時給はこの端末にのみ保存され、管理者には送信されません。',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.inkMute,
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              TextField(
-                                controller: _hourlyWageController,
-                                keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: '時給',
-                                  hintText: '例：1200',
-                                  suffixText: '円',
-                                ),
-                                onChanged: (_) {
-                                  setState(() {});
-                                  _saveWage();
-                                },
-                              ),
-                              const SizedBox(height: 12),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.background,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: AppColors.line),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          '対象時間（労働＋有給）',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.inkMute,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          '${_salaryHours.toStringAsFixed(2)} h',
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.ink,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          '今月の給料（見積り）',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primaryDeep,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        Text(
-                                          _estimatedSalary != null
-                                              ? '${_estimatedSalary!.toStringAsFixed(0)} 円'
-                                              : '時給を入力してください',
-                                          style: TextStyle(
-                                            fontSize: _estimatedSalary != null
-                                                ? 20
-                                                : 13,
-                                            fontWeight: FontWeight.bold,
-                                            color: _estimatedSalary != null
-                                                ? AppColors.primaryDeep
-                                                : AppColors.inkMute,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              const Text(
-                                '※有給（有）の日は、日付をタップして時間を入力すると'
-                                '給料計算に含まれます。',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppColors.inkMute,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
                               Text(
                                 _fmtMonthJp(config.targetMonth),
                                 style: const TextStyle(
@@ -1101,6 +985,122 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                   hintText: '例：来月は忙しいので調整お願いします',
                                 ),
                                 onChanged: (_) => _saveLocal(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '自分の給料計算（任意）',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDeep,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                '時給を入力すると、今月の希望時間から給料を自動計算します。'
+                                '入力した時給はこの端末にのみ保存され、管理者には送信されません。',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.inkMute,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _hourlyWageController,
+                                keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: '時給',
+                                  hintText: '例：1200',
+                                  suffixText: '円',
+                                ),
+                                onChanged: (_) {
+                                  setState(() {});
+                                  _saveWage();
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.line),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '対象時間（労働＋有給）',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.inkMute,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '${_salaryHours.toStringAsFixed(2)} h',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.ink,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '今月の給料（見積り）',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryDeep,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          _estimatedSalary != null
+                                              ? '${_estimatedSalary!.toStringAsFixed(0)} 円'
+                                              : '時給を入力してください',
+                                          style: TextStyle(
+                                            fontSize: _estimatedSalary != null
+                                                ? 20
+                                                : 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: _estimatedSalary != null
+                                                ? AppColors.primaryDeep
+                                                : AppColors.inkMute,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                '※有給（有）の日は、日付をタップして時間を入力すると'
+                                '給料計算に含まれます。',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.inkMute,
+                                ),
                               ),
                             ],
                           ),
