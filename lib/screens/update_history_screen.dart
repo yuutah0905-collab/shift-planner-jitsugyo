@@ -49,7 +49,7 @@ class UpdateHistoryScreen extends StatelessWidget {
                         style: TextStyle(fontSize: 12, color: Colors.white70),
                       ),
                       Text(
-                        'v${AppVersion.currentVersion}',
+                        'ver${AppVersion.currentVersion}',
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
@@ -95,7 +95,7 @@ class UpdateHistoryScreen extends StatelessWidget {
                                     : Border.all(color: AppColors.line),
                               ),
                               child: Text(
-                                'v${u.version}',
+                                'ver${u.version}',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,

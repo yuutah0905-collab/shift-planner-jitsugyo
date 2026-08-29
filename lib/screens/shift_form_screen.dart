@@ -675,7 +675,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'v${AppVersion.currentVersion}',
+                            'ver${AppVersion.currentVersion}',
                             style: const TextStyle(
                               fontSize: 11,
                               color: Colors.white70,
