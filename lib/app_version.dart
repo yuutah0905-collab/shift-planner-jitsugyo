@@ -35,16 +35,23 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '1.1';
+  static const String currentVersion = '1.2';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
     UpdateEntry(
+      version: '1.2',
+      date: '2026-08-29',
+      notes: [
+        'バージョン表示の文字が見切れる不具合を修正しました（今回で完全に直りました）',
+      ],
+    ),
+    UpdateEntry(
       version: '1.1',
       date: '2026-08-29',
       notes: [
-        'バージョン表示の文字が見切れる不具合を修正しました',
+        'バージョン表示を「v」から「ver」表記に変更しました',
         '新しいバージョンが出た時に気づけるよう「NEW」マークを追加しました',
       ],
     ),

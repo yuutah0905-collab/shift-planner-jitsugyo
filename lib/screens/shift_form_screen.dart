@@ -644,11 +644,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '${_fmtMonthJp(config.targetMonth)} シフト希望',
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                    style: const TextStyle(fontSize: 18),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${_fmtMonthJp(config.targetMonth)} シフト希望',
+                      maxLines: 1,
+                      style: const TextStyle(fontSize: 18),
+                    ),
                   ),
                   const SizedBox(height: 1),
                   // Small, unobtrusive version label - tap to see full
