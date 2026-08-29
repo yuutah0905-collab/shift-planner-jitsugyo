@@ -58,6 +58,11 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   bool _bulkMode = false;
   final Set<String> _selectedDates = {};
 
+  // 自分の給料計算（時給 x 今月の合計時間）用。時給は端末にのみ保存され、
+  // Firestore（管理者側）には送信されない - あくまでパートさん本人が
+  // 自分の給料を見積もるためのローカル機能。
+  final TextEditingController _hourlyWageController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +73,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     final config = await _firestoreService.fetchConfig();
     _buildDays(config);
     await _restoreLocalState(config);
+    await _loadWageForCurrentName();
     _wasPublished = _selectedDepartment != null &&
         _selectedDepartment!.isNotEmpty &&
         config.isDepartmentPublished(_selectedDepartment!);
@@ -204,6 +210,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           _days[key]!.hours = v['hours']?.toString() ?? '';
           _days[key]!.code = v['code']?.toString() ?? '';
           _days[key]!.memo = v['memo']?.toString() ?? '';
+          _days[key]!.paidLeaveHours = v['paidLeaveHours']?.toString() ?? '';
         }
       });
     }
@@ -270,6 +277,57 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
 
     setState(() => _nameController.text = picked.name);
     _saveLocal();
+    await _loadWageForCurrentName();
+  }
+
+  /// Loads this device's saved hourly wage for whichever name is
+  /// currently in [_nameController] (if any was saved before), so the
+  /// salary estimate keeps working across app restarts without the user
+  /// needing to re-type their wage every time.
+  Future<void> _loadWageForCurrentName() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    final wage = await _localStorage.loadHourlyWage(name);
+    if (wage != null && mounted) {
+      setState(() {
+        _hourlyWageController.text = wage % 1 == 0
+            ? wage.toInt().toString()
+            : wage.toString();
+      });
+    }
+  }
+
+  /// Saves the currently-typed hourly wage to this device, tied to the
+  /// currently-typed name. Called whenever the wage field changes.
+  Future<void> _saveWage() async {
+    final name = _nameController.text.trim();
+    final wage = double.tryParse(_hourlyWageController.text.trim());
+    if (name.isEmpty || wage == null) return;
+    await _localStorage.saveHourlyWage(name, wage);
+  }
+
+  /// Sum of all hours counted toward the personal salary estimate: normal
+  /// worked hours (from A〜Y codes) PLUS any user-entered paid-leave
+  /// hours. This is intentionally separate from [_totalHours] (which
+  /// feeds the admin-facing submission/summary) so that paid-leave time
+  /// only affects this personal calculator, never the admin's records.
+  double get _salaryHours {
+    double total = 0;
+    for (final d in _days.values) {
+      final h = double.tryParse(d.hours);
+      if (h != null) total += h;
+      final pl = double.tryParse(d.paidLeaveHours);
+      if (pl != null) total += pl;
+    }
+    return total;
+  }
+
+  /// Estimated salary = hourly wage x [_salaryHours]. Returns null if no
+  /// valid hourly wage has been entered yet.
+  double? get _estimatedSalary {
+    final wage = double.tryParse(_hourlyWageController.text.trim());
+    if (wage == null) return null;
+    return wage * _salaryHours;
   }
 
   /// Ensures the staff member selecting [employee]'s name is really them,
@@ -718,7 +776,10 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                     onPressed: _openNamePicker,
                                   ),
                                 ),
-                                onChanged: (_) => _saveLocal(),
+                                onChanged: (_) {
+                                  _saveLocal();
+                                  _loadWageForCurrentName();
+                                },
                               ),
                               const SizedBox(height: 6),
                               const Text(
@@ -903,6 +964,122 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '自分の給料計算（任意）',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.primaryDeep,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                '時給を入力すると、今月の希望時間から給料を自動計算します。'
+                                '入力した時給はこの端末にのみ保存され、管理者には送信されません。',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.inkMute,
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _hourlyWageController,
+                                keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true,
+                                ),
+                                decoration: const InputDecoration(
+                                  labelText: '時給',
+                                  hintText: '例：1200',
+                                  suffixText: '円',
+                                ),
+                                onChanged: (_) {
+                                  setState(() {});
+                                  _saveWage();
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: AppColors.line),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '対象時間（労働＋有給）',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: AppColors.inkMute,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          '${_salaryHours.toStringAsFixed(2)} h',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.ink,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          '今月の給料（見積り）',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primaryDeep,
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        Text(
+                                          _estimatedSalary != null
+                                              ? '${_estimatedSalary!.toStringAsFixed(0)} 円'
+                                              : '時給を入力してください',
+                                          style: TextStyle(
+                                            fontSize: _estimatedSalary != null
+                                                ? 20
+                                                : 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: _estimatedSalary != null
+                                                ? AppColors.primaryDeep
+                                                : AppColors.inkMute,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                '※有給（有）の日は、日付をタップして時間を入力すると'
+                                '給料計算に含まれます。',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.inkMute,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ),
@@ -949,6 +1126,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _configSub?.cancel();
     _nameController.dispose();
     _monthMemoController.dispose();
+    _hourlyWageController.dispose();
     super.dispose();
   }
 }

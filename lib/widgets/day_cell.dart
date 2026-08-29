@@ -191,6 +191,7 @@ class _DayEditSheet extends StatefulWidget {
 
 class _DayEditSheetState extends State<_DayEditSheet> {
   late TextEditingController _memoController;
+  late TextEditingController _paidLeaveHoursController;
   late String _code;
 
   @override
@@ -198,11 +199,15 @@ class _DayEditSheetState extends State<_DayEditSheet> {
     super.initState();
     _code = widget.entry.code;
     _memoController = TextEditingController(text: widget.entry.memo);
+    _paidLeaveHoursController = TextEditingController(
+      text: widget.entry.paidLeaveHours,
+    );
   }
 
   @override
   void dispose() {
     _memoController.dispose();
+    _paidLeaveHoursController.dispose();
     super.dispose();
   }
 
@@ -275,10 +280,41 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                 } else {
                   entry.hours = '';
                 }
+                // Paid leave doesn't clear paidLeaveHours - the user may
+                // want to re-select '有' after briefly picking something
+                // else, and shouldn't have to re-type the hours.
+                if (!ShiftCode.isPaidLeave(_code)) {
+                  entry.paidLeaveHours = '';
+                  _paidLeaveHoursController.clear();
+                }
               });
               widget.onChanged();
             },
           ),
+          if (ShiftCode.isPaidLeave(_code)) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _paidLeaveHoursController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(
+                labelText: '有給の時間（給料計算用）',
+                hintText: '例：8',
+                suffixText: '時間',
+              ),
+              onChanged: (val) {
+                entry.paidLeaveHours = val;
+                widget.onChanged();
+              },
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '※ここで入力した時間は「自分の給料計算」にのみ使われます。'
+              '管理者側の集計時間には影響しません。',
+              style: TextStyle(fontSize: 11, color: AppColors.inkMute),
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             controller: _memoController,
@@ -305,7 +341,9 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                     entry.code = '';
                     entry.hours = '';
                     entry.memo = '';
+                    entry.paidLeaveHours = '';
                     _memoController.clear();
+                    _paidLeaveHoursController.clear();
                   });
                   widget.onChanged();
                 },

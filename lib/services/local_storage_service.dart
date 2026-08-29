@@ -8,6 +8,11 @@ import '../models/employee.dart';
 class LocalStorageService {
   static const _key = 'shift_form_state_v1';
   static const _verifiedNamesKey = 'pin_verified_names_v1';
+  // Hourly wage is stored per-employee-name on this device only. It is
+  // the staff member's own private wage info, never sent to Firestore /
+  // visible to admins - used solely by the personal salary calculator
+  // on the shift-request screen.
+  static const _hourlyWageKey = 'hourly_wage_v1';
 
   Future<void> saveState({
     required String name,
@@ -60,5 +65,36 @@ class LocalStorageService {
     final prefs = await SharedPreferences.getInstance();
     final list = prefs.getStringList(_verifiedNamesKey) ?? [];
     return list.contains(Employee.normalizeName(employeeName));
+  }
+
+  /// Saves [hourlyWage] (yen per hour) for [employeeName] on this device
+  /// only. Stored per-name so that if multiple people share a device,
+  /// each person's wage stays separate. Never synced to Firestore.
+  Future<void> saveHourlyWage(String employeeName, double hourlyWage) async {
+    if (employeeName.trim().isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_hourlyWageKey);
+    final Map<String, dynamic> map = raw != null
+        ? (jsonDecode(raw) as Map<String, dynamic>)
+        : {};
+    map[Employee.normalizeName(employeeName)] = hourlyWage;
+    await prefs.setString(_hourlyWageKey, jsonEncode(map));
+  }
+
+  /// Loads the previously-saved hourly wage for [employeeName] on this
+  /// device, or null if none has been saved yet.
+  Future<double?> loadHourlyWage(String employeeName) async {
+    if (employeeName.trim().isEmpty) return null;
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_hourlyWageKey);
+    if (raw == null) return null;
+    try {
+      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final v = map[Employee.normalizeName(employeeName)];
+      if (v == null) return null;
+      return (v is num) ? v.toDouble() : double.tryParse(v.toString());
+    } catch (_) {
+      return null;
+    }
   }
 }
