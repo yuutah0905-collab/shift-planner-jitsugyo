@@ -80,7 +80,8 @@ Future<void> main() async {
     bool warn = false,
   }) {
     final acc = accent ?? primary;
-    return pw.Container(
+    return pw.Inseparable(
+      child: pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 10),
       padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
@@ -168,11 +169,13 @@ Future<void> main() async {
           ],
         ],
       ),
+      ),
     );
   }
 
   pw.Widget faqTile(String q, String a) {
-    return pw.Container(
+    return pw.Inseparable(
+      child: pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 8),
       padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
@@ -194,42 +197,55 @@ Future<void> main() async {
           ),
         ],
       ),
+      ),
     );
   }
 
   pw.Widget headerBar(String pageTitle) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.only(bottom: 8),
-      margin: const pw.EdgeInsets.only(bottom: 4),
-      decoration: pw.BoxDecoration(
-        border: pw.Border(bottom: pw.BorderSide(color: line, width: 0.7)),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.center,
-        children: [
-          pw.Container(
-            width: 22,
-            height: 22,
-            padding: const pw.EdgeInsets.all(2),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.white,
-              borderRadius: pw.BorderRadius.circular(4),
-              border: pw.Border.all(color: line, width: 0.5),
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Container(
+              width: 20,
+              height: 20,
+              padding: const pw.EdgeInsets.all(2),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.white,
+                borderRadius: pw.BorderRadius.circular(4),
+                border: pw.Border.all(color: line, width: 0.5),
+              ),
+              child: pw.Image(logoImage, fit: pw.BoxFit.contain),
             ),
-            child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+            pw.SizedBox(width: 7),
+            pw.Text(
+              'Shift Planner パートさん向けマニュアル',
+              style: pw.TextStyle(font: boldFont, fontSize: 8.5, color: inkMute),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 12),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Container(width: 4, height: 20, color: primary),
+            pw.SizedBox(width: 8),
+            pw.Text(
+              pageTitle,
+              style: pw.TextStyle(font: boldFont, fontSize: 18, color: ink),
+            ),
+          ],
+        ),
+        pw.Container(
+          margin: const pw.EdgeInsets.only(top: 8, bottom: 4),
+          padding: const pw.EdgeInsets.only(bottom: 0),
+          decoration: pw.BoxDecoration(
+            border: pw.Border(bottom: pw.BorderSide(color: line, width: 0.7)),
           ),
-          pw.SizedBox(width: 8),
-          pw.Text(
-            'Shift Planner パートさん向けマニュアル',
-            style: pw.TextStyle(font: boldFont, fontSize: 9, color: inkMute),
-          ),
-          pw.Spacer(),
-          pw.Text(
-            pageTitle,
-            style: pw.TextStyle(fontSize: 9, color: inkMute),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -352,14 +368,12 @@ Future<void> main() async {
   // Page: 基本情報の入力（氏名・部署・PIN）
   // ---------------------------------------------------------------------
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            headerBar('基本情報の入力'),
+      header: (context) => headerBar('基本情報の入力'),
+      footer: (context) => footerBar(context),
+      build: (context) => [
             pw.Container(
               width: double.infinity,
               padding: const pw.EdgeInsets.all(12),
@@ -426,10 +440,7 @@ Future<void> main() async {
                   '③ 選び終わったら、上部に表示される「（日数）日に適用」ボタンをタップ\n'
                   '④ 開いたシートで記号（時間）を選び「適用」を押すと、選んだ日すべてに反映されます',
             ),
-            footerBar(context),
-          ],
-        );
-      },
+      ],
     ),
   );
 
@@ -437,14 +448,12 @@ Future<void> main() async {
   // Page: 送信・確認ダイアログ
   // ---------------------------------------------------------------------
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            headerBar('送信のしかた'),
+      header: (context) => headerBar('送信のしかた'),
+      footer: (context) => footerBar(context),
+      build: (context) => [
             sectionHeader('入力が終わったら送信する'),
             stepTile(
               step: '7',
@@ -487,23 +496,26 @@ Future<void> main() async {
               step: '表',
               title: '「月間シフト一覧表を見る」バナーが出たら',
               accent: success,
+              badgeLabel: '一覧表',
+              badgeColor: success,
+              badgeBg: PdfColor.fromInt(0xFFE8F5E9),
               body:
                   '管理者が自分の部署のシフトを確定して配布すると、画面上部に緑色のバナー「シフトが確定しました。月間シフト一覧表を見る」が表示されます。タップすると、自分の部署の全員分のシフトが1つの表で確認できます。\n'
                   '・確認できるのは自分の部署の分だけです（他の部署の一覧表は見られません）\n'
                   '・表の下部に管理者からの「備考」欄が表示されている場合があります（連絡事項など）',
             ),
             stepTile(
-              step: '鈴',
+              step: '通',
               title: '配布された瞬間に通知でお知らせ',
               accent: success,
+              badgeLabel: '通知機能',
+              badgeColor: success,
+              badgeBg: PdfColor.fromInt(0xFFE8F5E9),
               body:
                   'この画面（シフト希望の入力画面）を開いたままにしていると、管理者が配布した瞬間に画面下部に通知（メッセージ）が表示され、バナーも自動的に現れます。画面を下に引っ張って更新する必要はありません。\n'
                   '※ アプリを閉じている間は通知が届きません。配布されたかどうかは、この画面を開いたときにバナーが出ているかどうかで確認してください。',
             ),
-            footerBar(context),
-          ],
-        );
-      },
+      ],
     ),
   );
 
@@ -511,14 +523,12 @@ Future<void> main() async {
   // Page: 自分の給料計算（新機能特集ページ）
   // ---------------------------------------------------------------------
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            headerBar('新機能：自分の給料計算'),
+      header: (context) => headerBar('新機能：自分の給料計算'),
+      footer: (context) => footerBar(context),
+      build: (context) => [
             pw.Container(
               width: double.infinity,
               padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -619,10 +629,7 @@ Future<void> main() async {
               '※ この機能は普段は閉じた状態なので、他の人に画面を見せても給料情報は表示されません。',
               style: pw.TextStyle(fontSize: 9, color: inkMute, lineSpacing: 2),
             ),
-            footerBar(context),
-          ],
-        );
-      },
+      ],
     ),
   );
 
@@ -630,14 +637,12 @@ Future<void> main() async {
   // Page: バージョン表示・アップデート情報
   // ---------------------------------------------------------------------
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            headerBar('バージョン表示・アップデート情報'),
+      header: (context) => headerBar('バージョン表示・アップデート情報'),
+      footer: (context) => footerBar(context),
+      build: (context) => [
             sectionHeader('アプリのバージョンを確認する', color: inkMute),
             stepTile(
               step: 'V',
@@ -647,7 +652,7 @@ Future<void> main() async {
                   '画面タイトルの下に、小さく「ver1.3」のようにバージョン番号が表示されています。アプリが更新されるたびに、この番号が上がっていきます（例：ver1.3 → ver1.4）。目立たない表示なので、気にせず普段通り使って大丈夫です。',
             ),
             stepTile(
-              step: 'NEW',
+              step: '新',
               title: '新しいアップデートがあると「NEW」マークが出る',
               accent: primaryDeep,
               badgeLabel: 'NEW',
@@ -683,10 +688,7 @@ Future<void> main() async {
               '毎回シフトを提出するたびにPINを入力しないといけませんか？',
               'いいえ。一度正しいPINを入力すると、その端末では確認済みとして記録され、次回からは聞かれません。月が変わって新しいシフト希望を出す場合も、同じ端末であれば再入力は不要です。',
             ),
-            footerBar(context),
-          ],
-        );
-      },
+      ],
     ),
   );
 
@@ -694,14 +696,12 @@ Future<void> main() async {
   // Page: よくある質問（続き）
   // ---------------------------------------------------------------------
   doc.addPage(
-    pw.Page(
+    pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.fromLTRB(36, 28, 36, 28),
-      build: (context) {
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            headerBar('よくある質問（つづき）'),
+      header: (context) => headerBar('よくある質問（つづき）'),
+      footer: (context) => footerBar(context),
+      build: (context) => [
             sectionHeader('よくある質問（Q&A）つづき'),
             faqTile(
               '一度送信した後に、内容を間違えていたことに気づきました。',
@@ -752,10 +752,7 @@ Future<void> main() async {
                 ],
               ),
             ),
-            footerBar(context),
-          ],
-        );
-      },
+      ],
     ),
   );
 
