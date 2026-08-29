@@ -13,6 +13,10 @@ class LocalStorageService {
   // visible to admins - used solely by the personal salary calculator
   // on the shift-request screen.
   static const _hourlyWageKey = 'hourly_wage_v1';
+  // Tracks which app version this device has last "seen" (i.e. opened
+  // the update-history screen for), so we can show a "NEW" badge next
+  // to the version label whenever a newer version is deployed.
+  static const _lastSeenVersionKey = 'last_seen_app_version_v1';
 
   Future<void> saveState({
     required String name,
@@ -96,5 +100,20 @@ class LocalStorageService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// The app version this device last acknowledged (opened the update
+  /// history screen for). Returns null if never opened before (e.g. a
+  /// brand-new device/browser).
+  Future<String?> loadLastSeenVersion() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastSeenVersionKey);
+  }
+
+  /// Marks [version] as seen on this device, so the "NEW" badge for it
+  /// (and older versions) stops showing.
+  Future<void> markVersionSeen(String version) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastSeenVersionKey, version);
   }
 }

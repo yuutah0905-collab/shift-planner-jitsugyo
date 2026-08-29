@@ -41,6 +41,11 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   bool _loading = true;
   bool _submitting = false;
 
+  // Whether the app has been updated since this device last opened the
+  // update-history screen - shows a red "NEW" badge next to the version
+  // label so people actually notice updates instead of missing them.
+  bool _hasNewUpdate = false;
+
   // Live-updates the config (target month, holidays, deadline, notice,
   // and crucially `publishedDepartments`) so the "シフト配布" banner
   // appears immediately once an admin publishes - no pull-to-refresh or
@@ -76,12 +81,22 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _buildDays(config);
     await _restoreLocalState(config);
     await _loadWageForCurrentName();
+    final lastSeen = await _localStorage.loadLastSeenVersion();
+    if (lastSeen == null) {
+      // First-ever visit on this device - there's nothing "new" to
+      // compare against, so just record the current version as seen
+      // and don't show the badge.
+      await _localStorage.markVersionSeen(AppVersion.currentVersion);
+    }
     _wasPublished = _selectedDepartment != null &&
         _selectedDepartment!.isNotEmpty &&
         config.isDepartmentPublished(_selectedDepartment!);
     setState(() {
       _config = config;
       _loading = false;
+      // Show the "NEW" badge only if this device previously saw an
+      // OLDER version than the one currently running.
+      _hasNewUpdate = lastSeen != null && lastSeen != AppVersion.currentVersion;
     });
     // Start listening for real-time config changes AFTER the initial load
     // + local-state restore above have settled `_selectedDepartment`, so
@@ -607,6 +622,8 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        titleSpacing: 16,
+        toolbarHeight: 64,
         title: Row(
           children: [
             Container(
@@ -623,34 +640,73 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                '${_fmtMonthJp(config.targetMonth)} シフト希望',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Small, unobtrusive version label - tap to see full update
-            // history (date + what changed for each version).
-            InkWell(
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const UpdateHistoryScreen(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_fmtMonthJp(config.targetMonth)} シフト希望',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 18),
                   ),
-                );
-              },
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 3,
-                ),
-                child: Text(
-                  'v${AppVersion.currentVersion}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.white70,
+                  const SizedBox(height: 1),
+                  // Small, unobtrusive version label - tap to see full
+                  // update history (date + what changed for each
+                  // version). A red "NEW" dot appears whenever a version
+                  // newer than the one this device last opened is
+                  // available, so updates don't go unnoticed.
+                  InkWell(
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const UpdateHistoryScreen(),
+                        ),
+                      );
+                      await _localStorage.markVersionSeen(
+                        AppVersion.currentVersion,
+                      );
+                      if (mounted) setState(() => _hasNewUpdate = false);
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'v${AppVersion.currentVersion}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                          ),
+                          if (_hasNewUpdate) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'NEW',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
