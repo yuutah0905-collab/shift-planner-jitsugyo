@@ -50,6 +50,12 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   // wage/salary info stays hidden if a coworker glances at this screen.
   bool _salaryExpanded = false;
 
+  // Used to auto-scroll the salary card fully into view once it expands,
+  // so the wage input + estimated salary are visible without the user
+  // having to manually scroll down.
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _salaryCardKey = GlobalKey();
+
   // Live-updates the config (target month, holidays, deadline, notice,
   // and crucially `publishedDepartments`) so the "シフト配布" banner
   // appears immediately once an admin publishes - no pull-to-refresh or
@@ -325,6 +331,25 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     final wage = double.tryParse(_hourlyWageController.text.trim());
     if (name.isEmpty || wage == null) return;
     await _localStorage.saveHourlyWage(name, wage);
+  }
+
+  /// After expanding the salary calculator card, scroll it fully into
+  /// view so the wage field and estimated salary are visible right away
+  /// without the user having to manually scroll down.
+  void _scrollSalaryCardIntoView() {
+    // Wait for the expand animation (AnimatedSize, 200ms) to finish so the
+    // card's final height is known before we measure/scroll to it.
+    Future.delayed(const Duration(milliseconds: 220), () {
+      if (!mounted) return;
+      final ctx = _salaryCardKey.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeInOut,
+        alignment: 1.0, // align the bottom of the card to the viewport
+      );
+    });
   }
 
   /// Sum of all hours counted toward the personal salary estimate: normal
@@ -747,6 +772,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                 onRefresh: _refresh,
                 color: AppColors.primary,
                 child: SingleChildScrollView(
+                  controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                   child: Column(
@@ -1082,6 +1108,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                       ),
                       const SizedBox(height: 12),
                       Card(
+                        key: _salaryCardKey,
                         child: Padding(
                           padding: const EdgeInsets.all(14),
                           child: Column(
@@ -1092,9 +1119,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                               // wage/salary info isn't visible at a glance if
                               // a coworker happens to see this screen.
                               InkWell(
-                                onTap: () => setState(
-                                  () => _salaryExpanded = !_salaryExpanded,
-                                ),
+                                onTap: () {
+                                  setState(
+                                    () => _salaryExpanded = !_salaryExpanded,
+                                  );
+                                  if (_salaryExpanded) {
+                                    _scrollSalaryCardIntoView();
+                                  }
+                                },
                                 borderRadius: BorderRadius.circular(8),
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -1303,6 +1335,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     _nameController.dispose();
     _monthMemoController.dispose();
     _hourlyWageController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 }
