@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import '../app_version.dart';
 import '../models/app_config.dart';
 import '../models/day_entry.dart';
 import '../models/employee.dart';
@@ -15,6 +16,7 @@ import '../widgets/summary_card.dart';
 import 'admin_login_screen.dart';
 import 'help_screen.dart';
 import 'monthly_shift_matrix_screen.dart';
+import 'update_history_screen.dart';
 
 const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 const List<String> _dowJpHeader = ['日', '月', '火', '水', '木', '金', '土'];
@@ -624,6 +626,31 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
               child: Text(
                 '${_fmtMonthJp(config.targetMonth)} シフト希望',
                 overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Small, unobtrusive version label - tap to see full update
+            // history (date + what changed for each version).
+            InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const UpdateHistoryScreen(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                child: Text(
+                  'v${AppVersion.currentVersion}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white70,
+                  ),
+                ),
               ),
             ),
           ],
