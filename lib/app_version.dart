@@ -1,18 +1,20 @@
 /// Central place to track the app's version number and update history.
 ///
 /// VERSIONING RULE:
-/// Bump by +0.1 on every deploy that includes a user-facing change,
-/// no matter how small (bug fix or new feature) - e.g. 1.0 -> 1.1 -> 1.2
-/// -> ... -> 1.9 -> 1.10 -> 1.11 ... This keeps the rule simple and
-/// predictable for everyone: "the number goes up = something changed".
-/// A jump straight to the next whole number (e.g. 2.0) is reserved for
-/// a genuinely major overhaul, at the developer's discretion - not part
-/// of the routine bump.
+/// Bump by +0.1 on every deploy that includes a user-facing change, no
+/// matter how small (bug fix or new feature) - treating the version as
+/// a simple decimal counter: 1.0 -> 1.1 -> 1.2 -> ... -> 1.8 -> 1.9 ->
+/// 2.0 -> 2.1 -> ... (i.e. after .9 the whole-number part increments and
+/// the decimal resets to .0, just like an odometer - NOT 1.10). This
+/// keeps the rule simple and predictable for everyone: "the number goes
+/// up = something changed".
 ///
 /// HOW TO USE (for future updates):
 /// Every time a new feature/fix is deployed to production, bump
-/// [currentVersion] by +0.1 and add a new [UpdateEntry] at the TOP of
-/// [updateHistory] (newest first) describing what changed and the date.
+/// [currentVersion] by +0.1 (with odometer-style rollover per the rule
+/// above - e.g. 1.9 -> 2.0, not 1.10) and add a new [UpdateEntry] at the
+/// TOP of [updateHistory] (newest first) describing what changed and
+/// the date.
 ///
 /// This is intentionally a plain Dart file (not fetched from Firestore)
 /// since version history is the same for everyone and doesn't need to be
