@@ -191,23 +191,34 @@ class _DayEditSheet extends StatefulWidget {
 
 class _DayEditSheetState extends State<_DayEditSheet> {
   late TextEditingController _memoController;
-  late TextEditingController _paidLeaveHoursController;
   late String _code;
+
+  /// The A〜Y symbol selected for the paid-leave hours (used only for the
+  /// personal salary estimate, not sent to the admin as work hours).
+  /// Derived from the stored [DayEntry.paidLeaveHours] value by matching
+  /// it back to its corresponding shift code, so re-opening the sheet
+  /// shows the previously selected symbol instead of a raw number.
+  String _paidLeaveCode = '';
 
   @override
   void initState() {
     super.initState();
     _code = widget.entry.code;
     _memoController = TextEditingController(text: widget.entry.memo);
-    _paidLeaveHoursController = TextEditingController(
-      text: widget.entry.paidLeaveHours,
-    );
+    final storedHours = double.tryParse(widget.entry.paidLeaveHours);
+    if (storedHours != null) {
+      for (final e in ShiftCode.codes) {
+        if ((e.value - storedHours).abs() < 0.001) {
+          _paidLeaveCode = e.key;
+          break;
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
     _memoController.dispose();
-    _paidLeaveHoursController.dispose();
     super.dispose();
   }
 
@@ -282,10 +293,10 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                 }
                 // Paid leave doesn't clear paidLeaveHours - the user may
                 // want to re-select '有' after briefly picking something
-                // else, and shouldn't have to re-type the hours.
+                // else, and shouldn't have to re-select the hours symbol.
                 if (!ShiftCode.isPaidLeave(_code)) {
                   entry.paidLeaveHours = '';
-                  _paidLeaveHoursController.clear();
+                  _paidLeaveCode = '';
                 }
               });
               widget.onChanged();
@@ -293,18 +304,24 @@ class _DayEditSheetState extends State<_DayEditSheet> {
           ),
           if (ShiftCode.isPaidLeave(_code)) ...[
             const SizedBox(height: 12),
-            TextField(
-              controller: _paidLeaveHoursController,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
-              ),
-              decoration: const InputDecoration(
-                labelText: '有給の時間（給料計算用）',
-                hintText: '例：8',
-                suffixText: '時間',
-              ),
+            DropdownButtonFormField<String>(
+              initialValue: _paidLeaveCode.isEmpty ? null : _paidLeaveCode,
+              decoration: const InputDecoration(labelText: '有給の時間（給料計算用）'),
+              hint: const Text('記号を選択'),
+              items: ShiftCode.codes
+                  .map(
+                    (e) => DropdownMenuItem(
+                      value: e.key,
+                      child: Text(ShiftCode.labelFor(e.key, e.value)),
+                    ),
+                  )
+                  .toList(),
               onChanged: (val) {
-                entry.paidLeaveHours = val;
+                setState(() {
+                  _paidLeaveCode = val ?? '';
+                  final h = val != null ? ShiftCode.hoursForCode(val) : null;
+                  entry.paidLeaveHours = h != null ? h.toStringAsFixed(2) : '';
+                });
                 widget.onChanged();
               },
             ),
@@ -342,8 +359,8 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                     entry.hours = '';
                     entry.memo = '';
                     entry.paidLeaveHours = '';
+                    _paidLeaveCode = '';
                     _memoController.clear();
-                    _paidLeaveHoursController.clear();
                   });
                   widget.onChanged();
                 },
