@@ -35,11 +35,16 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '1.3';
+  static const String currentVersion = '1.4';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '1.4',
+      date: '2026-08-30',
+      notes: ['有給休暇の時間入力を、シフト希望と同じA〜Yの記号選択方式に変更しました（手入力は不要になりました）'],
+    ),
     UpdateEntry(
       version: '1.3',
       date: '2026-08-29',
