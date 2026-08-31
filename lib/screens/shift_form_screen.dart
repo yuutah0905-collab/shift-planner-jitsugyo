@@ -362,8 +362,15 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     for (final d in _days.values) {
       final h = double.tryParse(d.hours);
       if (h != null) total += h;
-      final pl = double.tryParse(d.paidLeaveHours);
-      if (pl != null) total += pl;
+      // Defensive check: only count paid-leave hours for days whose code
+      // is actually '有'. This guards against stale paidLeaveHours values
+      // left over from a day that was previously '有' and later changed/
+      // cleared via some other path (e.g. bulk-apply, restored local
+      // state from an older app version) without properly resetting it.
+      if (ShiftCode.isPaidLeave(d.code)) {
+        final pl = double.tryParse(d.paidLeaveHours);
+        if (pl != null) total += pl;
+      }
     }
     return total;
   }
@@ -437,10 +444,21 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           if (code == _bulkClearSentinel) {
             entry.code = '';
             entry.hours = '';
+            // Also clear any leftover paid-leave hours entered for the
+            // salary calculator - otherwise bulk-clearing a day that was
+            // previously '有' leaves stale hours counted toward the
+            // personal salary estimate even though the day is now blank.
+            entry.paidLeaveHours = '';
           } else {
             entry.code = code;
             final h = ShiftCode.hoursForCode(code);
             entry.hours = h != null ? h.toStringAsFixed(2) : '';
+            // Bulk-applying a normal A〜Y code (not '有') also needs to
+            // clear any previously-entered paid-leave hours for the same
+            // reason as above - the day is no longer a paid-leave day.
+            if (!ShiftCode.isPaidLeave(code)) {
+              entry.paidLeaveHours = '';
+            }
           }
         }
         _bulkMode = false;
