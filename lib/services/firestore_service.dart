@@ -83,6 +83,30 @@ class FirestoreService {
     return _groupByPerson(list);
   }
 
+  /// Streams shift submissions for a given target month in real time, so
+  /// the monthly shift matrix stays in sync automatically whenever an
+  /// admin edits a submission (e.g. corrects hours) - even while it's
+  /// already published and part-time staff are viewing it. Without this,
+  /// staff only saw the snapshot from the moment they opened the matrix,
+  /// and admins had to un-publish/re-publish just to force a refresh.
+  /// Uses the same grouping as [fetchSubmissionsForMonth] (newest per
+  /// person at the top level, older ones nested in `previousVersions`).
+  Stream<List<ShiftSubmission>> watchSubmissionsForMonth(String targetMonth) {
+    return _db
+        .collection('shift_submissions')
+        .where('targetMonth', isEqualTo: targetMonth)
+        .snapshots()
+        .map((querySnapshot) {
+          final list = querySnapshot.docs
+              .map((doc) => ShiftSubmission.fromMap(doc.id, doc.data()))
+              .toList();
+          return _groupByPerson(list);
+        })
+        .handleError((e) {
+          if (kDebugMode) debugPrint('watchSubmissionsForMonth error: $e');
+        });
+  }
+
   /// Fetch all shift submissions (used when admin wants to see everything)
   Future<List<ShiftSubmission>> fetchAllSubmissions() async {
     final querySnapshot = await _db.collection('shift_submissions').get();

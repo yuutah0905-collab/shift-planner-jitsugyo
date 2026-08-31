@@ -252,6 +252,20 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   late int _month;
   late int _daysInMonth;
   late Map<String, int> _rosterOrder;
+
+  // Mutable working copy of widget.submissions. In readOnly mode (part-time
+  // staff's published view) this is kept live-updated via
+  // [_submissionsSub] below, so an admin's edit to a shift (e.g. correcting
+  // hours from the matrix screen) shows up immediately for staff who
+  // already have this screen open - without the admin needing to
+  // un-publish/re-publish just to force a refresh. In admin (editable)
+  // mode this is simply mutated in place by [_editHours], same as before.
+  late List<ShiftSubmission> _submissions;
+
+  // Only used in readOnly mode: keeps the matrix in sync with Firestore in
+  // real time so admin edits made WHILE staff are viewing the published
+  // matrix appear automatically.
+  StreamSubscription<List<ShiftSubmission>>? _submissionsSub;
   // Whether the currently selected department is published ("シフト配布")
   // for this target month, for part-time staff of that department to
   // view. Admin-only state, irrelevant in readOnly mode. Per-department
@@ -362,6 +376,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   @override
   void initState() {
     super.initState();
+    _submissions = List<ShiftSubmission>.from(widget.submissions);
     _buildRosterOrder();
     if (widget.initialDepartment.isNotEmpty &&
         widget.availableDepartments.contains(widget.initialDepartment)) {
@@ -393,7 +408,23 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
           _syncOffset(_bodyHController, _headerHController, isVertical: false),
     );
     _loadRemarks();
-    if (!widget.readOnly) _loadPublishedState();
+    if (!widget.readOnly) {
+      _loadPublishedState();
+    } else {
+      // Part-time staff's published view: subscribe to real-time updates
+      // so admin edits (hour corrections, etc.) appear immediately without
+      // needing to un-publish/re-publish or reopen this screen.
+      _submissionsSub = _firestoreService
+          .watchSubmissionsForMonth(widget.targetMonth)
+          .listen((all) {
+            if (!mounted) return;
+            setState(() {
+              _submissions = all
+                  .where((s) => widget.availableDepartments.contains(s.department))
+                  .toList();
+            });
+          });
+    }
   }
 
   /// Loads whether the CURRENTLY SELECTED department is published for
@@ -512,6 +543,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
   @override
   void dispose() {
+    _submissionsSub?.cancel();
     _nameVController.dispose();
     _gridVController.dispose();
     _headerHController.dispose();
@@ -536,8 +568,8 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// roster members) - matching daily_attendance_screen.dart's convention.
   List<_PersonRow> get _rows {
     final filtered = _selectedDepartment.isEmpty
-        ? widget.submissions
-        : widget.submissions
+        ? _submissions
+        : _submissions
               .where((s) => s.department == _selectedDepartment)
               .toList();
 
@@ -716,10 +748,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       await _firestoreService.updateSubmission(updated);
       if (!mounted) return;
       setState(() {
-        final idx = widget.submissions.indexWhere(
+        final idx = _submissions.indexWhere(
           (s) => s.id == row.submission.id,
         );
-        if (idx != -1) widget.submissions[idx] = updated;
+        if (idx != -1) _submissions[idx] = updated;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('時間を修正しました')),
