@@ -42,7 +42,7 @@ class AppVersion {
   static const List<UpdateEntry> updateHistory = [
     UpdateEntry(
       version: '1.6',
-      date: '2026-08-30',
+      date: '2026-09-01',
       notes: [
         '有給休暇を取り消した際に、給料計算の時間が残ってしまう不具合を修正しました',
         '（有給ではない日の時間が、給料計算に誤って含まれないようにしました）',
@@ -50,7 +50,7 @@ class AppVersion {
     ),
     UpdateEntry(
       version: '1.5',
-      date: '2026-08-30',
+      date: '2026-08-31',
       notes: [
         '月間シフト一覧表を、配布したまま自動で最新の内容に更新されるようにしました',
         '（管理者がシフトを修正しても、一旦配布を停止して再配布する必要がなくなりました）',
@@ -58,7 +58,7 @@ class AppVersion {
     ),
     UpdateEntry(
       version: '1.4',
-      date: '2026-08-30',
+      date: '2026-08-31',
       notes: ['有給休暇の時間入力を、シフト希望と同じA〜Yの記号選択方式に変更しました（手入力は不要になりました）'],
     ),
     UpdateEntry(
