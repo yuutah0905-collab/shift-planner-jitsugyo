@@ -35,11 +35,18 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '1.6';
+  static const String currentVersion = '1.7';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '1.7',
+      date: '2026-09-01',
+      notes: [
+        'iPhone（Safari）で、部署や人マークなどのボタンをタップしても反応しない（少し上を押さないと反応しない）不具合を修正しました',
+      ],
+    ),
     UpdateEntry(
       version: '1.6',
       date: '2026-09-01',

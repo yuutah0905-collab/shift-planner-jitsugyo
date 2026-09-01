@@ -37,9 +37,26 @@
   <link rel="manifest" href="manifest.json">
 
   <style>
+    /* iOS Safari fix: Flutter's web engine only pins <body> to the screen
+       (position: fixed + overflow: hidden), but on iOS Safari the actual
+       scrolling/bounce container is <html>, not <body>. Without this same
+       lock on <html>, a finger-drag anywhere on the page can trigger iOS's
+       native rubber-band scroll on <html> while Flutter's own content stays
+       visually pinned to <body> - so the page's real scroll position and
+       Flutter's on-screen layout momentarily disagree, and iOS computes tap
+       coordinates against the wrong one. The visible symptom reported by
+       users: buttons/dropdowns only respond if you tap noticeably ABOVE
+       where they're actually drawn. Locking <html> down the same way <body>
+       already is prevents iOS from ever scrolling it, so this mismatch (and
+       the tap-offset bug) can't happen.
+       Related: https://github.com/flutter/flutter/issues/183596 */
     html, body {
       margin: 0;
       height: 100%;
+      overflow: hidden;
+      position: fixed;
+      inset: 0;
+      overscroll-behavior: none;
       background: #FFFFFF;
     }
     #loading-splash {
