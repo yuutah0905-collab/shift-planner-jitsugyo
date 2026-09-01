@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
 import '../app_version.dart';
 import '../models/app_config.dart';
 import '../models/day_entry.dart';
@@ -727,63 +726,32 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     );
   }
 
-  /// Status banner shown near the top of the form so part-time staff can
-  /// tell at a glance whether they've already submitted their shift for
-  /// the current target month, without needing to ask the admin or dig
-  /// through the monthly matrix. Backed by [_mySubmission], which is
-  /// kept in sync in real time via [_submissionsSub] - so if this
-  /// person submits from another device, or an admin deletes their
-  /// submission, this banner updates automatically without a manual
-  /// refresh.
-  Widget _buildSubmissionStatusBanner() {
-    final submission = _mySubmission;
-    final submitted = submission != null;
-    final color = submitted ? AppColors.success : Colors.orange;
-    final icon = submitted
-        ? Icons.check_circle_outline
-        : Icons.error_outline;
-
-    String statusText;
-    if (!submitted) {
-      statusText = 'この月のシフトはまだ送信されていません';
-    } else {
-      final ts = submission.submittedAt;
-      final whenText = ts != null
-          ? DateFormat('M/d HH:mm').format(ts)
-          : null;
-      if (submission.isResubmission) {
-        statusText = whenText != null
-            ? '送信済みです（再送信 $whenText 提出・全${submission.submissionCount}回）'
-            : '送信済みです（再送信・全${submission.submissionCount}回）';
-      } else {
-        statusText = whenText != null
-            ? '送信済みです（$whenText 提出）'
-            : '送信済みです';
-      }
+  /// Short label for the compact "送信ステータス" row inside the summary
+  /// stat card (see [SummaryCard.submissionStatusLabel]) - intentionally
+  /// terse ("送信済み" / "未送信" / "再提出2回") rather than a full
+  /// sentence, since it now shares space with the 2x2 stat grid instead
+  /// of being its own full-width banner. Backed by [_mySubmission],
+  /// which is kept in sync in real time via [_submissionsSub].
+  /// Returns null if no name/department has been entered yet, meaning
+  /// there's nothing meaningful to check submission status against.
+  String? get _submissionStatusLabel {
+    if (_selectedDepartment == null ||
+        _selectedDepartment!.isEmpty ||
+        _nameController.text.trim().isEmpty) {
+      return null;
     }
+    final submission = _mySubmission;
+    if (submission == null) return '未送信';
+    if (submission.isResubmission) {
+      return '再提出${submission.submissionCount - 1}回';
+    }
+    return '送信済み';
+  }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              statusText,
-              style: TextStyle(fontWeight: FontWeight.bold, color: color),
-            ),
-          ),
-        ],
-      ),
-    );
+  /// Color paired with [_submissionStatusLabel] - orange for "未送信",
+  /// the app's success-green for anything already submitted.
+  Color get _submissionStatusColor {
+    return _mySubmission == null ? Colors.orange : AppColors.success;
   }
 
   @override
@@ -973,10 +941,6 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                             ),
                           ),
                         ),
-                      if (_selectedDepartment != null &&
-                          _selectedDepartment!.isNotEmpty &&
-                          _nameController.text.trim().isNotEmpty)
-                        _buildSubmissionStatusBanner(),
                       if (config.notice.isNotEmpty ||
                           config.deadline.isNotEmpty)
                         Container(
@@ -1122,6 +1086,8 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                 totalHours: _totalHours,
                                 memoCount: _memoCount,
                                 holidayCount: _holidayCount,
+                                submissionStatusLabel: _submissionStatusLabel,
+                                submissionStatusColor: _submissionStatusColor,
                               ),
                               const SizedBox(height: 10),
                               Row(
