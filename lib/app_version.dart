@@ -35,11 +35,19 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '1.7';
+  static const String currentVersion = '1.8';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '1.8',
+      date: '2026-09-01',
+      notes: [
+        'ホーム画面に追加したアプリ（アイコンから起動）でも、ボタンをタップしても反応しない不具合を修正しました',
+        '（Safariでは直っていたのに、ホーム画面のアプリだけ直っていなかった原因を修正）',
+      ],
+    ),
     UpdateEntry(
       version: '1.7',
       date: '2026-09-01',

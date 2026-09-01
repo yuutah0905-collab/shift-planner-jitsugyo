@@ -25,7 +25,20 @@
   <!-- iOS "Add to Home Screen" support -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <!--
+    IMPORTANT: "black-translucent" only takes effect when the app is
+    launched from the Home Screen icon (standalone mode) - it is silently
+    ignored when viewed in the regular Safari browser tab. It tells iOS to
+    draw the status bar as a see-through overlay ON TOP of our content
+    instead of reserving space for it, which is a well-known source of a
+    mismatch between where content is drawn and where iOS thinks it is for
+    touch hit-testing near the top of the screen in standalone/home-screen
+    apps - this is exactly why staff only saw the "tap slightly above the
+    button" bug in the home-screen app, never in plain Safari. "default"
+    makes iOS reserve proper space for the status bar (opaque, no overlay),
+    which avoids that mismatch entirely.
+  -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="シフト希望">
   <link rel="apple-touch-icon" sizes="192x192" href="icons/Icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="icons/Icon-512.png">
