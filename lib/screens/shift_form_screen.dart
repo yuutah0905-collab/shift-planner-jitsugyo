@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 import '../app_version.dart';
 import '../models/app_config.dart';
 import '../models/day_entry.dart';
@@ -68,7 +69,20 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   // silently appearing, which is easy to miss.
   bool? _wasPublished;
 
-
+  // Live-updates the list of shift submissions for the CURRENT department
+  // + target month, so the "送信済み/未送信" status banner below always
+  // reflects the true Firestore state (e.g. if staff submit from a
+  // different device, or an admin deletes a submission) without needing
+  // a manual refresh. Re-subscribed only when the department or target
+  // month changes (NOT on every keystroke while typing a name) - the
+  // actual name match against this list happens in [_mySubmission],
+  // which re-evaluates on every build as the user types.
+  StreamSubscription<List<ShiftSubmission>>? _submissionsSub;
+  List<ShiftSubmission> _monthSubmissions = [];
+  // Tracks the (department, targetMonth) pair we're currently subscribed
+  // for, so we don't tear down/recreate the stream subscription on every
+  // unrelated rebuild - only when one of these two actually changes.
+  String? _submissionsSubKey;
 
   // 一括入力（bulk input）モード: 有効化すると日付セルをタップして
   // 複数選択でき、選択した日にまとめて同じ記号を適用できる。
@@ -114,6 +128,56 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     // _onConfigUpdate) compares against the correct baseline instead of
     // a default/empty department.
     _configSub = _firestoreService.watchConfig().listen(_onConfigUpdate);
+    _updateSubmissionsSubscription();
+  }
+
+  /// (Re)subscribes to a real-time stream of shift submissions for
+  /// whichever (department, targetMonth) pair is currently active, so the
+  /// "送信済み/未送信" status banner (see [_mySubmission]) always reflects
+  /// the true Firestore state. No-ops if department or target month
+  /// hasn't actually changed since the last subscription, so this can be
+  /// called freely (e.g. from every _onConfigUpdate tick) without
+  /// constantly tearing down and recreating the stream.
+  void _updateSubmissionsSubscription() {
+    final dept = _selectedDepartment;
+    final month = _config?.targetMonth;
+    if (dept == null || dept.isEmpty || month == null || month.isEmpty) {
+      _submissionsSub?.cancel();
+      _submissionsSub = null;
+      _submissionsSubKey = null;
+      if (_monthSubmissions.isNotEmpty) {
+        setState(() => _monthSubmissions = []);
+      }
+      return;
+    }
+    final key = '$dept|$month';
+    if (_submissionsSubKey == key) return; // already subscribed
+    _submissionsSubKey = key;
+    _submissionsSub?.cancel();
+    _submissionsSub = _firestoreService
+        .watchSubmissionsForMonth(month)
+        .listen((list) {
+          if (!mounted) return;
+          setState(() {
+            _monthSubmissions = list.where((s) => s.department == dept).toList();
+          });
+        });
+  }
+
+  /// This device's own submission for the currently-selected name +
+  /// department + target month, if one exists in the live-streamed
+  /// [_monthSubmissions] list - used to render the "送信済み/未送信"
+  /// status banner. Name matching uses the same normalization as the PIN
+  /// safety-net check in [_submit] (ignores whitespace/case differences),
+  /// so e.g. "山田 太郎" typed with an extra space still matches.
+  ShiftSubmission? get _mySubmission {
+    final typedName = _nameController.text.trim();
+    if (typedName.isEmpty) return null;
+    final normalized = Employee.normalizeName(typedName);
+    for (final s in _monthSubmissions) {
+      if (Employee.normalizeName(s.name) == normalized) return s;
+    }
+    return null;
   }
 
   /// Called on every real-time config update (admin edits settings,
@@ -146,6 +210,12 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
         ),
       );
     }
+    if (monthChanged) {
+      // Target month changed (admin advanced to a new month) - re-point
+      // the submissions stream at the new month so the 送信済み/未送信
+      // banner reflects the new month instead of stale data.
+      _updateSubmissionsSubscription();
+    }
   }
 
   /// Pull-to-refresh: re-fetch the admin config (target month, holidays,
@@ -158,6 +228,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     setState(() {
       _config = config;
     });
+    _updateSubmissionsSubscription();
     if (mounted) {
       _showSnack('最新の設定を取得しました');
     }
@@ -656,6 +727,65 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     );
   }
 
+  /// Status banner shown near the top of the form so part-time staff can
+  /// tell at a glance whether they've already submitted their shift for
+  /// the current target month, without needing to ask the admin or dig
+  /// through the monthly matrix. Backed by [_mySubmission], which is
+  /// kept in sync in real time via [_submissionsSub] - so if this
+  /// person submits from another device, or an admin deletes their
+  /// submission, this banner updates automatically without a manual
+  /// refresh.
+  Widget _buildSubmissionStatusBanner() {
+    final submission = _mySubmission;
+    final submitted = submission != null;
+    final color = submitted ? AppColors.success : Colors.orange;
+    final icon = submitted
+        ? Icons.check_circle_outline
+        : Icons.error_outline;
+
+    String statusText;
+    if (!submitted) {
+      statusText = 'この月のシフトはまだ送信されていません';
+    } else {
+      final ts = submission.submittedAt;
+      final whenText = ts != null
+          ? DateFormat('M/d HH:mm').format(ts)
+          : null;
+      if (submission.isResubmission) {
+        statusText = whenText != null
+            ? '送信済みです（再送信 $whenText 提出・全${submission.submissionCount}回）'
+            : '送信済みです（再送信・全${submission.submissionCount}回）';
+      } else {
+        statusText = whenText != null
+            ? '送信済みです（$whenText 提出）'
+            : '送信済みです';
+      }
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              statusText,
+              style: TextStyle(fontWeight: FontWeight.bold, color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading || _config == null) {
@@ -843,6 +973,10 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                             ),
                           ),
                         ),
+                      if (_selectedDepartment != null &&
+                          _selectedDepartment!.isNotEmpty &&
+                          _nameController.text.trim().isNotEmpty)
+                        _buildSubmissionStatusBanner(),
                       if (config.notice.isNotEmpty ||
                           config.deadline.isNotEmpty)
                         Container(
@@ -922,6 +1056,11 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                       val != null &&
                                       val.isNotEmpty &&
                                       _config!.isDepartmentPublished(val);
+                                  // Re-point the submissions stream at the
+                                  // newly selected department, so the
+                                  // 送信済み/未送信 banner checks the right
+                                  // department's data.
+                                  _updateSubmissionsSubscription();
                                   _saveLocal();
                                 },
                               ),
@@ -938,6 +1077,12 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                   ),
                                 ),
                                 onChanged: (_) {
+                                  // setState so the 送信済み/未送信 status
+                                  // banner (which matches against
+                                  // _nameController.text) re-evaluates as
+                                  // the user types, not just when a name
+                                  // is picked from the roster sheet.
+                                  setState(() {});
                                   _saveLocal();
                                   _loadWageForCurrentName();
                                 },
@@ -1350,6 +1495,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
   @override
   void dispose() {
     _configSub?.cancel();
+    _submissionsSub?.cancel();
     _nameController.dispose();
     _monthMemoController.dispose();
     _hourlyWageController.dispose();

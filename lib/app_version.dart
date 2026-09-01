@@ -35,11 +35,19 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '1.8';
+  static const String currentVersion = '1.9';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '1.9',
+      date: '2026-09-01',
+      notes: [
+        '自分のシフトが送信済みかどうか、画面上部でひと目でわかるようになりました',
+        '（「送信済み」「まだ送信されていません」の表示が自動で切り替わります）',
+      ],
+    ),
     UpdateEntry(
       version: '1.8',
       date: '2026-09-01',
