@@ -561,9 +561,33 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     return '${parts[0]}年${int.parse(parts[1])}月';
   }
 
+  /// True once today's date (device-local) is AFTER the admin-configured
+  /// [AppConfig.deadline] day. The deadline day itself still counts as
+  /// "before/at the deadline" (inclusive) - only once the calendar date
+  /// has moved past it does submission get blocked. An empty deadline
+  /// means the admin hasn't set one, so it never blocks submission.
+  bool get _isPastDeadline {
+    final deadline = _config?.deadline;
+    if (deadline == null || deadline.isEmpty) return false;
+    final parts = deadline.split('-');
+    if (parts.length != 3) return false;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return false;
+    final deadlineDate = DateTime(y, m, d);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return today.isAfter(deadlineDate);
+  }
+
   static const String _bulkClearSentinel = '__clear__';
 
   Future<void> _submit() async {
+    if (_isPastDeadline) {
+      _showSnack('受付締切（${_config?.deadline}）を過ぎているため、送信できません');
+      return;
+    }
     if (_nameController.text.trim().isEmpty) {
       _showSnack('氏名を入力してください');
       return;
@@ -948,7 +972,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                           padding: const EdgeInsets.all(12),
                           margin: const EdgeInsets.only(bottom: 12),
                           decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
+                            // Turn the whole notice box red once past the
+                            // deadline, so staff notice immediately why
+                            // the submit button below is now disabled -
+                            // rather than just quietly failing.
+                            color: (_isPastDeadline
+                                    ? Colors.red
+                                    : AppColors.primary)
+                                .withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Column(
@@ -956,10 +987,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                             children: [
                               if (config.deadline.isNotEmpty)
                                 Text(
-                                  '受付締切: ${config.deadline}',
-                                  style: const TextStyle(
+                                  _isPastDeadline
+                                      ? '受付締切: ${config.deadline}（受付終了しました）'
+                                      : '受付締切: ${config.deadline}',
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryDeep,
+                                    color: _isPastDeadline
+                                        ? Colors.red
+                                        : AppColors.primaryDeep,
                                   ),
                                 ),
                               if (config.notice.isNotEmpty)
@@ -1437,7 +1472,13 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _submitting ? null : _submit,
+                  // Disabled entirely once past the admin-set deadline -
+                  // prevents submission client-side rather than just
+                  // discouraging it, since staff could otherwise ignore
+                  // the notice text and tap through anyway.
+                  onPressed: (_submitting || _isPastDeadline)
+                      ? null
+                      : _submit,
                   icon: _submitting
                       ? const SizedBox(
                           width: 18,
@@ -1447,8 +1488,14 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.send),
-                  label: Text(_submitting ? '送信中...' : 'シフト送信'),
+                      : Icon(
+                          _isPastDeadline ? Icons.lock_outline : Icons.send,
+                        ),
+                  label: Text(
+                    _submitting
+                        ? '送信中...'
+                        : (_isPastDeadline ? '受付終了しました' : 'シフト送信'),
+                  ),
                 ),
               ),
             ),
