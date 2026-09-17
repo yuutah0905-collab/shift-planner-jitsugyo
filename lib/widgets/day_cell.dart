@@ -71,10 +71,18 @@ class DayCell extends StatelessWidget {
       bg = AppColors.primary.withValues(alpha: 0.10);
     }
 
-    final accentColor = hasCustomTime
-        ? AppColors.customTime
-        : (isPaidLeave ? AppColors.paidLeave : AppColors.primary);
+    final accentColor = isPaidLeave ? AppColors.paidLeave : AppColors.primary;
     final canSelect = selectionMode && !entry.isHoliday;
+    // A custom time range's own "HH:MM〜HH:MM" text doesn't fit this
+    // compact cell (it used to overflow the cell's bounds and push the
+    // date number out of its normal top position) - the cell should just
+    // turn yellow to flag "this day has a custom time"; the exact range
+    // is only ever shown when tapped (in the edit sheet / detail popup).
+    // If an A~Y symbol is ALSO selected alongside the custom time, that
+    // symbol still shows as the normal badge, same as any other day.
+    final String? badgeLabel = entry.code.isNotEmpty
+        ? entry.code
+        : (hasCustomTime ? null : (entry.hours.isNotEmpty ? '${entry.hours}h' : null));
 
     return InkWell(
       onTap: entry.isHoliday
@@ -120,7 +128,7 @@ class DayCell extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   )
-                else if (hasInput)
+                else if (badgeLabel != null)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 5,
@@ -131,11 +139,7 @@ class DayCell extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      hasCustomTime
-                          ? '${entry.customStartTime}〜${entry.customEndTime}'
-                          : (entry.code.isNotEmpty
-                                ? entry.code
-                                : '${entry.hours}h'),
+                      badgeLabel,
                       style: const TextStyle(
                         fontSize: 9,
                         color: Colors.white,
@@ -143,6 +147,12 @@ class DayCell extends StatelessWidget {
                       ),
                     ),
                   )
+                else if (hasCustomTime)
+                  // Custom-time-only day (no A~Y symbol selected): no
+                  // badge text at all - the yellow cell background alone
+                  // signals "custom time entered", keeping this cell
+                  // visually identical in layout to every other cell.
+                  const SizedBox(height: 14)
                 else
                   const Text(
                     '－',
