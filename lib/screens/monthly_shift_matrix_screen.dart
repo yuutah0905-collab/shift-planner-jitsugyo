@@ -752,6 +752,26 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       color: AppColors.customTime,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.free_breakfast_outlined,
+                        size: 14,
+                        color: entry.customHasBreak
+                            ? AppColors.customTime
+                            : AppColors.inkMute,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        entry.customHasBreak ? '10分休憩あり' : '10分休憩なし',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.inkSoft,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     '合計 ${entry.hours}h（任意の時間で入力）',
@@ -862,6 +882,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       // overridden it here.
       entry!.customStartTime = '';
       entry.customEndTime = '';
+      entry.customHasBreak = false;
       if (isNewEntry) {
         row.submission.days.add(entry);
       }
@@ -1580,14 +1601,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // uses (see the reference image) - the letter codes are just an
     // internal shorthand for data entry, not what should be printed/shown.
     // Paid leave has no fixed hour value, so it keeps its "有" label. A
-    // custom dial-picker time range shows the actual "HH:MM〜HH:MM" range
-    // instead of just a plain hour count, so the admin can tell at a
-    // glance (without tapping in) exactly what was requested.
+    // custom dial-picker time range shows its computed hour count (e.g.
+    // "6.00h") rather than the raw "HH:MM〜HH:MM" range, since the exact
+    // clock time is available on tap via the detail popup - the cell
+    // itself just needs to say "this day used a custom time" (via its
+    // yellow fill) and roughly how many hours.
     final hoursValue = isBlank ? null : double.tryParse(entry.hours);
     final label = isBlank
         ? ''
         : (hasCustomTime
-              ? '${entry.customStartTime}\n〜${entry.customEndTime}'
+              ? '${hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.hours}h'
               : (isPaidLeave
                     ? ShiftCode.paidLeaveCode
                     : (hoursValue != null
@@ -1645,7 +1668,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: (hasCustomTime ? 8 : 11) * _fontScale,
+                    fontSize: 11 * _fontScale,
                     color: AppColors.ink,
                   ),
                 ),

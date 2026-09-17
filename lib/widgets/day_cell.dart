@@ -299,10 +299,15 @@ class _DayEditSheetState extends State<_DayEditSheet> {
               setState(() {
                 _code = val ?? '';
                 entry.code = _code;
+                // A fixed A~Y symbol always drives the admin-facing
+                // [hours] value - even if a custom time range is also
+                // set (the two can coexist: the symbol determines the
+                // work-hour count, the custom time is kept purely as a
+                // human-readable reference of the actual clock time).
                 if (val != null) {
                   final h = ShiftCode.hoursForCode(val);
                   entry.hours = h != null ? h.toStringAsFixed(2) : '';
-                } else {
+                } else if (!entry.hasCustomTime) {
                   entry.hours = '';
                 }
                 // Paid leave doesn't clear paidLeaveHours - the user may
@@ -312,13 +317,6 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                   entry.paidLeaveHours = '';
                   _paidLeaveCode = '';
                 }
-                // A~Y is a distinct entry method from the custom dial-
-                // picker time range - picking a fixed symbol here means
-                // the day is no longer a "custom time" day, so clear any
-                // previously-entered custom start/end time to avoid the
-                // two conflicting representations coexisting.
-                entry.customStartTime = '';
-                entry.customEndTime = '';
               });
               widget.onChanged();
             },
@@ -349,33 +347,29 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                       context: context,
                       initialStart: entry.customStartTime,
                       initialEnd: entry.customEndTime,
+                      initialHasBreak: entry.customHasBreak,
                     );
                     if (result == null) return;
                     // Compute the worked duration from the chosen range
                     // (handling an end time past midnight as next-day,
-                    // matching showTimeRangeDialPicker's own duration
-                    // logic) so admin totals/exports keep working from
-                    // [entry.hours] unchanged, while the human-readable
-                    // range is preserved separately for display.
-                    final sParts = result.startTime.split(':');
-                    final eParts = result.endTime.split(':');
-                    final startMinutes =
-                        int.parse(sParts[0]) * 60 + int.parse(sParts[1]);
-                    var endMinutes =
-                        int.parse(eParts[0]) * 60 + int.parse(eParts[1]);
-                    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
-                    final durationHours =
-                        (endMinutes - startMinutes) / 60.0;
+                    // and subtracting a 10-minute break if selected).
+                    // If a fixed A~Y symbol is ALSO selected, that symbol
+                    // keeps driving [entry.hours] (admin totals/payroll
+                    // are based on the symbol, not the free-form time) -
+                    // the custom time range is otherwise purely a
+                    // human-readable reference of the actual clock time.
+                    final durationHours = DayEntry.durationHoursBetween(
+                      result.startTime,
+                      result.endTime,
+                      hasBreak: result.hasBreak,
+                    );
                     setState(() {
                       entry.customStartTime = result.startTime;
                       entry.customEndTime = result.endTime;
-                      entry.hours = durationHours.toStringAsFixed(2);
-                      // A custom time range is a distinct entry method
-                      // from the fixed A~Y symbol - clear the code so
-                      // the two don't visually conflict (e.g. showing
-                      // both a letter badge and a time-range badge).
-                      _code = '';
-                      entry.code = '';
+                      entry.customHasBreak = result.hasBreak;
+                      if (_code.isEmpty) {
+                        entry.hours = durationHours.toStringAsFixed(2);
+                      }
                     });
                     widget.onChanged();
                   },
@@ -390,7 +384,8 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                     setState(() {
                       entry.customStartTime = '';
                       entry.customEndTime = '';
-                      entry.hours = '';
+                      entry.customHasBreak = false;
+                      if (_code.isEmpty) entry.hours = '';
                     });
                     widget.onChanged();
                   },
@@ -400,9 +395,9 @@ class _DayEditSheetState extends State<_DayEditSheet> {
           ),
           if (entry.hasCustomTime) ...[
             const SizedBox(height: 4),
-            const Text(
-              '※記号（A〜Y）を選ぶと、この任意の時間の入力は取り消されます。',
-              style: TextStyle(fontSize: 11, color: AppColors.inkMute),
+            Text(
+              entry.customHasBreak ? '（10分休憩あり）' : '（10分休憩なし）',
+              style: const TextStyle(fontSize: 11, color: AppColors.inkMute),
             ),
           ],
           if (ShiftCode.isPaidLeave(_code)) ...[
@@ -464,6 +459,7 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                     entry.paidLeaveHours = '';
                     entry.customStartTime = '';
                     entry.customEndTime = '';
+                    entry.customHasBreak = false;
                     _paidLeaveCode = '';
                     _memoController.clear();
                   });

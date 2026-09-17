@@ -1,15 +1,22 @@
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../models/day_entry.dart';
 import '../theme/app_theme.dart';
 
 /// Result of [showTimeRangeDialPicker]: the selected start/end time as
-/// "HH:MM" (24h) strings, or null if the user cancelled.
+/// "HH:MM" (24h) strings, plus whether a 10-minute break was selected,
+/// or null if the user cancelled.
 class TimeRangeResult {
   final String startTime; // "HH:MM"
   final String endTime; // "HH:MM"
+  final bool hasBreak;
 
-  const TimeRangeResult({required this.startTime, required this.endTime});
+  const TimeRangeResult({
+    required this.startTime,
+    required this.endTime,
+    this.hasBreak = false,
+  });
 }
 
 /// Shows a bottom sheet with a dial-style (scroll wheel) start/end time
@@ -21,6 +28,7 @@ Future<TimeRangeResult?> showTimeRangeDialPicker({
   required BuildContext context,
   String initialStart = '',
   String initialEnd = '',
+  bool initialHasBreak = false,
 }) {
   return showModalBottomSheet<TimeRangeResult>(
     context: context,
@@ -31,6 +39,7 @@ Future<TimeRangeResult?> showTimeRangeDialPicker({
     builder: (ctx) => _TimeRangeDialSheet(
       initialStart: initialStart,
       initialEnd: initialEnd,
+      initialHasBreak: initialHasBreak,
     ),
   );
 }
@@ -38,10 +47,12 @@ Future<TimeRangeResult?> showTimeRangeDialPicker({
 class _TimeRangeDialSheet extends StatefulWidget {
   final String initialStart;
   final String initialEnd;
+  final bool initialHasBreak;
 
   const _TimeRangeDialSheet({
     required this.initialStart,
     required this.initialEnd,
+    this.initialHasBreak = false,
   });
 
   @override
@@ -53,6 +64,7 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   late int _startMinute; // in 5-minute steps (0,5,10...55)
   late int _endHour;
   late int _endMinute;
+  late bool _hasBreak;
 
   // Reused between all 4 wheels rather than one AudioPlayer per wheel -
   // rapid scrolling can fire many ticks per second, and starting a new
@@ -69,6 +81,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     // Pre-set the low-latency-friendly source so the very first tick
     // isn't delayed by a network/asset lookup.
     _tickPlayer.setSource(AssetSource('sounds/dial_tick.mp3'));
+
+    _hasBreak = widget.initialHasBreak;
 
     final startParts = widget.initialStart.split(':');
     if (startParts.length == 2) {
@@ -114,16 +128,15 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
       '${_endHour.toString().padLeft(2, '0')}:${_endMinute.toString().padLeft(2, '0')}';
 
   /// Duration in hours between start and end, treating end <= start as
-  /// spanning into the next day (e.g. a night shift 22:00〜翌6:00) -
-  /// matches how the rest of the app has no concept of an explicit
-  /// "next day" flag, so this is the most intuitive interpretation for
-  /// a single-day shift form.
-  double get _durationHours {
-    final startMinutes = _startHour * 60 + _startMinute;
-    var endMinutes = _endHour * 60 + _endMinute;
-    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
-    return (endMinutes - startMinutes) / 60.0;
-  }
+  /// spanning into the next day (e.g. a night shift 22:00〜翌6:00) and
+  /// subtracting a 10-minute break if selected - matches how the rest of
+  /// the app has no concept of an explicit "next day" flag, so this is
+  /// the most intuitive interpretation for a single-day shift form.
+  double get _durationHours => DayEntry.durationHoursBetween(
+    _startLabel,
+    _endLabel,
+    hasBreak: _hasBreak,
+  );
 
   void _confirm() {
     if (_durationHours <= 0) {
@@ -133,7 +146,11 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
       return;
     }
     Navigator.of(context).pop(
-      TimeRangeResult(startTime: _startLabel, endTime: _endLabel),
+      TimeRangeResult(
+        startTime: _startLabel,
+        endTime: _endLabel,
+        hasBreak: _hasBreak,
+      ),
     );
   }
 
@@ -219,13 +236,46 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
                     fontSize: 16,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  '（${_durationHours.toStringAsFixed(2)}h）',
-                  style: const TextStyle(
-                    color: AppColors.inkSoft,
-                    fontSize: 13,
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.free_breakfast_outlined,
+                  size: 18,
+                  color: AppColors.inkSoft,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '10分休憩',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
                   ),
+                ),
+                ChoiceChip(
+                  label: const Text('なし'),
+                  selected: !_hasBreak,
+                  onSelected: (_) => setState(() => _hasBreak = false),
+                ),
+                const SizedBox(width: 6),
+                ChoiceChip(
+                  label: const Text('あり'),
+                  selected: _hasBreak,
+                  onSelected: (_) => setState(() => _hasBreak = true),
                 ),
               ],
             ),
