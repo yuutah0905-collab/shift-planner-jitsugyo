@@ -66,6 +66,26 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   late int _endMinute;
   late bool _hasBreak;
 
+  // One FixedExtentScrollController per wheel, created ONCE in initState
+  // and reused for the lifetime of this sheet - NOT recreated on every
+  // build(). Each notch change calls setState() (to update the
+  // "09:00〜17:00" summary text etc.), which re-runs build(); if the
+  // wheel's controller were instead created inline in build() (as it
+  // used to be: `FixedExtentScrollController(initialItem: ...)` passed
+  // straight into ListWheelScrollView.useDelegate), every one of those
+  // rebuilds handed the ListWheelScrollView a brand-new controller
+  // mid-gesture. On iOS Safari in particular this repeatedly tore down
+  // and rebuilt the scrollable's internal ballistic/inertia scroll
+  // simulation while the user's finger was still dragging, producing
+  // the reported "カクつく" (janky/stuttering) feel - Android/desktop
+  // Chrome's scroll physics happened to be more forgiving of this and
+  // masked the bug. Keeping a single stable controller per wheel fixes
+  // this at the root.
+  late final FixedExtentScrollController _startHourController;
+  late final FixedExtentScrollController _startMinuteController;
+  late final FixedExtentScrollController _endHourController;
+  late final FixedExtentScrollController _endMinuteController;
+
   // A pool of several pre-loaded AudioPlayers for the tick sound, rather
   // than a single shared player. Rapid dial scrolling can fire many
   // ticks per second (one per notch, via onSelectedItemChanged); reusing
@@ -109,11 +129,26 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
       _endHour = 17;
       _endMinute = 0;
     }
+
+    _startHourController = FixedExtentScrollController(
+      initialItem: _startHour,
+    );
+    _startMinuteController = FixedExtentScrollController(
+      initialItem: _startMinute ~/ 5,
+    );
+    _endHourController = FixedExtentScrollController(initialItem: _endHour);
+    _endMinuteController = FixedExtentScrollController(
+      initialItem: _endMinute ~/ 5,
+    );
   }
 
   @override
   void dispose() {
     _tickPool?.dispose();
+    _startHourController.dispose();
+    _startMinuteController.dispose();
+    _endHourController.dispose();
+    _endMinuteController.dispose();
     super.dispose();
   }
 
@@ -211,8 +246,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
               Expanded(
                 child: _timeDialColumn(
                   label: '開始',
-                  hour: _startHour,
-                  minute: _startMinute,
+                  hourController: _startHourController,
+                  minuteController: _startMinuteController,
                   onHourChanged: (v) => setState(() => _startHour = v),
                   onMinuteChanged: (v) => setState(() => _startMinute = v),
                 ),
@@ -224,8 +259,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
               Expanded(
                 child: _timeDialColumn(
                   label: '終了',
-                  hour: _endHour,
-                  minute: _endMinute,
+                  hourController: _endHourController,
+                  minuteController: _endMinuteController,
                   onHourChanged: (v) => setState(() => _endHour = v),
                   onMinuteChanged: (v) => setState(() => _endMinute = v),
                 ),
@@ -310,8 +345,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
 
   Widget _timeDialColumn({
     required String label,
-    required int hour,
-    required int minute,
+    required FixedExtentScrollController hourController,
+    required FixedExtentScrollController minuteController,
     required ValueChanged<int> onHourChanged,
     required ValueChanged<int> onMinuteChanged,
   }) {
@@ -339,8 +374,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
                 children: [
                   Expanded(
                     child: _wheel(
+                      controller: hourController,
                       itemCount: 24,
-                      initialItem: hour,
                       onChanged: onHourChanged,
                       labelBuilder: (i) => i.toString().padLeft(2, '0'),
                     ),
@@ -355,8 +390,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
                   ),
                   Expanded(
                     child: _wheel(
+                      controller: minuteController,
                       itemCount: 12, // 0,5,10,...,55 (5-minute steps)
-                      initialItem: minute ~/ 5,
                       onChanged: (v) => onMinuteChanged(v * 5),
                       labelBuilder: (i) => (i * 5).toString().padLeft(2, '0'),
                     ),
@@ -389,8 +424,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   }
 
   Widget _wheel({
+    required FixedExtentScrollController controller,
     required int itemCount,
-    required int initialItem,
     required ValueChanged<int> onChanged,
     required String Function(int) labelBuilder,
   }) {
@@ -398,8 +433,16 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     // on/passes through as it's dragged (a discrete "notch" event, not a
     // continuous per-pixel callback), which is exactly the granularity we
     // want for a single click-tick per detent.
+    //
+    // `controller` is passed in from the parent State (created once in
+    // initState, see _TimeRangeDialSheetState) rather than created here -
+    // this widget itself has no State of its own, so creating the
+    // controller inline here would still mean a fresh instance every
+    // time _timeDialColumn()/_wheel() re-runs as part of the parent's
+    // build(), which is exactly the mid-gesture controller churn that
+    // caused the iOS jank this fixes.
     return ListWheelScrollView.useDelegate(
-      controller: FixedExtentScrollController(initialItem: initialItem),
+      controller: controller,
       itemExtent: 34,
       diameterRatio: 1.4,
       perspective: 0.003,
