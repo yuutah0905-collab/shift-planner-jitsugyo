@@ -204,6 +204,50 @@ class FirestoreService {
     });
   }
 
+  /// When an admin renames someone in the employee roster (⑥従業員名簿),
+  /// this updates that person's `name` field on every EXISTING
+  /// shift_submissions document that matches [oldName] + [department]
+  /// (case/whitespace-insensitive match, via [Employee.normalizeName]),
+  /// so the rename is reflected immediately in the monthly shift matrix,
+  /// daily attendance list, and the staff member's own "送信済み" status -
+  /// not just for future submissions. Uses a batched write since there
+  /// may be multiple historical submissions (resubmissions) for the same
+  /// person. Silently does nothing if no matching submissions exist yet
+  /// (e.g. the person hasn't submitted anything this month).
+  Future<void> renameEmployeeInSubmissions({
+    required String oldName,
+    required String department,
+    required String newName,
+  }) async {
+    final normalizedOld = oldName.replaceAll(
+      RegExp(r'[\s\u3000]+'),
+      '',
+    ).trim().toLowerCase();
+    if (normalizedOld.isEmpty || oldName == newName) return;
+
+    final querySnapshot = await _db
+        .collection('shift_submissions')
+        .where('department', isEqualTo: department)
+        .get();
+
+    final batch = _db.batch();
+    var matched = 0;
+    for (final doc in querySnapshot.docs) {
+      final docName = doc.data()['name']?.toString() ?? '';
+      final normalizedDocName = docName.replaceAll(
+        RegExp(r'[\s\u3000]+'),
+        '',
+      ).trim().toLowerCase();
+      if (normalizedDocName == normalizedOld) {
+        batch.update(doc.reference, {'name': newName});
+        matched++;
+      }
+    }
+    if (matched > 0) {
+      await batch.commit();
+    }
+  }
+
   /// Update the app-wide config (admin settings screen)
   Future<void> updateConfig(AppConfig config) async {
     await _db.collection('app_settings').doc('config').set({

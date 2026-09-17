@@ -297,8 +297,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              '※名前を変更すると、パートさん本人にも新しい名前で選択・入力してもらう'
-              '必要があります（過去に送信済みのシフトの氏名は変わりません）。',
+              '※保存すると、過去に送信済みのシフトの氏名もまとめて新しい名前に更新されます。'
+              'パートさん本人には、次回から新しい名前で選択・入力してもらってください。',
               style: TextStyle(fontSize: 11, color: AppColors.inkMute),
             ),
           ],
@@ -333,6 +333,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return;
     }
 
+    final oldName = employee.name;
     setState(() {
       final idx = _employees.indexOf(employee);
       if (idx != -1) {
@@ -343,6 +344,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         );
       }
     });
+
+    // Also update the name on any EXISTING shift_submissions docs for
+    // this person (this month's and any other month's), so the rename is
+    // reflected immediately everywhere - the monthly shift matrix, daily
+    // attendance list, and the staff member's own "送信済み" status -
+    // instead of only applying to submissions made after the rename.
+    try {
+      await _firestoreService.renameEmployeeInSubmissions(
+        oldName: oldName,
+        department: employee.department,
+        newName: result,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('名簿は変更されましたが、過去の提出データの氏名更新に失敗しました'),
+          ),
+        );
+      }
+    }
   }
 
   /// Employees currently visible in the roster list, narrowed to
