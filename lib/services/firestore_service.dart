@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import '../models/app_config.dart';
+import '../models/employee.dart';
 import '../models/shift_submission.dart';
 
 class FirestoreService {
@@ -202,6 +203,20 @@ class FirestoreService {
       'days': submission.days.map((d) => d.toMap()).toList(),
       'totalHours': submission.totalHours,
     });
+  }
+
+  /// Persists ONLY the employee roster (⑥従業員名簿) to Firestore,
+  /// independent of the rest of the settings screen's "設定を保存" button.
+  /// Used so that roster edits made through their own dedicated dialogs
+  /// (rename, PIN edit, add, remove, reorder) take effect immediately -
+  /// without requiring the admin to also press the main save button,
+  /// which otherwise could discard the roster change if the admin
+  /// navigated away, or make it look like the edit "didn't work" until
+  /// the unrelated save button was pressed.
+  Future<void> updateEmployees(List<Employee> employees) async {
+    await _db.collection('app_settings').doc('config').set({
+      'employees': employees.map((e) => e.toMap()).toList(),
+    }, SetOptions(merge: true));
   }
 
   /// When an admin renames someone in the employee roster (⑥従業員名簿),

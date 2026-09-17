@@ -222,6 +222,29 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _departments.remove(v));
   }
 
+  /// Persists the current in-memory `_employees` roster to Firestore
+  /// immediately, independent of the main "設定を保存" button at the
+  /// bottom of this screen. Without this, a roster edit (rename, PIN
+  /// change, add, remove, reorder) only lived in this screen's local
+  /// state until the admin separately pressed the unrelated main save
+  /// button - which looked like the edit "didn't work" if the admin
+  /// navigated away first (a very easy mistake to make, since the
+  /// roster section has its own visually-separate add/remove/rename
+  /// controls that look self-contained). Called after every roster
+  /// mutation below. Errors are surfaced via a SnackBar so a failed
+  /// save is never silent.
+  Future<void> _persistEmployees() async {
+    try {
+      await _firestoreService.updateEmployees(_employees);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('従業員名簿の保存に失敗しました。通信環境をご確認ください。')),
+        );
+      }
+    }
+  }
+
   /// ランダムな4桁PIN（0000〜9999）を生成する。既存の従業員PINと重複しないよう
   /// になるべく配慮するが、万一重複しても本人名で識別するため実害はない。
   String _generateRandomPin() {
@@ -255,10 +278,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       );
       _empNameController.clear();
     });
+    _persistEmployees();
   }
 
   void _removeEmployee(Employee e) {
     setState(() => _employees.remove(e));
+    _persistEmployees();
   }
 
   /// Opens a dialog to rename an existing employee. Renaming only
@@ -345,23 +370,30 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       }
     });
 
-    // Also update the name on any EXISTING shift_submissions docs for
-    // this person (this month's and any other month's), so the rename is
-    // reflected immediately everywhere - the monthly shift matrix, daily
-    // attendance list, and the staff member's own "送信済み" status -
-    // instead of only applying to submissions made after the rename.
+    // Persist the renamed roster entry to Firestore immediately (does
+    // NOT wait for the separate "設定を保存" button at the bottom of this
+    // screen) and update the name on any EXISTING shift_submissions docs
+    // for this person, so the rename is reflected right away everywhere -
+    // the roster itself, the monthly shift matrix, the daily attendance
+    // list, and the staff member's own "送信済み" status.
     try {
-      await _firestoreService.renameEmployeeInSubmissions(
-        oldName: oldName,
-        department: employee.department,
-        newName: result,
-      );
+      await Future.wait([
+        _firestoreService.updateEmployees(_employees),
+        _firestoreService.renameEmployeeInSubmissions(
+          oldName: oldName,
+          department: employee.department,
+          newName: result,
+        ),
+      ]);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('「$oldName」を「$result」に変更しました')),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('名簿は変更されましたが、過去の提出データの氏名更新に失敗しました'),
-          ),
+          const SnackBar(content: Text('名前の変更の保存に失敗しました。通信環境をご確認ください。')),
         );
       }
     }
@@ -414,6 +446,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _employees[slots[i]] = sub[i];
       }
     });
+    _persistEmployees();
   }
 
   /// Opens a dialog to view the current PIN (masked, revealable) and/or
@@ -508,6 +541,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         );
       }
     });
+    _persistEmployees();
   }
 
   int get _holidayCountThisCalMonth {
