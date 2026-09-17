@@ -689,6 +689,120 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     );
   }
 
+  /// Shows the exact start/end time for a day with a dial-picker custom
+  /// time range (see [DayEntry.hasCustomTime]) - used for BOTH the
+  /// readOnly staff view and the admin view, since this is purely
+  /// informational (viewing the already-entered range), not an edit
+  /// action. The admin can still fall back to the normal tap-to-edit
+  /// sheet by closing this dialog and tapping again... actually no -
+  /// since a custom-time cell always opens this detail dialog first,
+  /// a small "時間を修正" button is offered here so the admin isn't
+  /// stuck unable to reach the normal edit sheet for that day.
+  void _showCustomTimeDialog(_PersonRow row, DayEntry entry, int day) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(
+              Icons.schedule,
+              color: AppColors.customTime,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                row.name,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              row.department.isNotEmpty
+                  ? '${row.department} ・ $_month月$day日'
+                  : '$_month月$day日',
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.customTimeBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.customTime.withValues(alpha: 0.4),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${entry.customStartTime} 〜 ${entry.customEndTime}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.customTime,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '合計 ${entry.hours}h（任意の時間で入力）',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.inkSoft,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (entry.memo.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 16,
+                    color: AppColors.success,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      entry.memo,
+                      style: const TextStyle(fontSize: 13, height: 1.35),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (!widget.readOnly)
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _editHours(row, day);
+              },
+              child: const Text('時間を修正'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('閉じる'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Opens the manual hour-correction bottom sheet for [row]'s entry on
   /// [day], applies the admin's change to the in-memory `DayEntry`
   /// (mutating it in place - see DayEntry's mutable hours/code fields),
@@ -740,8 +854,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         entry!.hours = result.hours!.toStringAsFixed(2);
         entry.code = '';
       }
+      // Any change made through this normal admin edit sheet is a
+      // different representation than the staff-side dial-picker time
+      // range (plain hours / paid-leave / cleared, vs. a "HH:MM〜HH:MM"
+      // range) - clear the custom range so the cell stops being shown
+      // as a yellow "custom time" day once the admin has explicitly
+      // overridden it here.
+      entry!.customStartTime = '';
+      entry.customEndTime = '';
       if (isNewEntry) {
-        row.submission.days.add(entry!);
+        row.submission.days.add(entry);
       }
     });
 
@@ -1449,6 +1571,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
     final isHolidayCell = entry?.isHoliday ?? isWeekend;
     final isBlank = entry == null || (entry.hours.isEmpty && entry.code.isEmpty);
+    final hasCustomTime = !isBlank && entry.hasCustomTime;
 
     final isPaidLeave = !isBlank && ShiftCode.isPaidLeave(entry.code);
     final hasMemo = !isBlank && entry.memo.isNotEmpty;
@@ -1456,32 +1579,49 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // code for display, matching the paper/Excel shift table the company
     // uses (see the reference image) - the letter codes are just an
     // internal shorthand for data entry, not what should be printed/shown.
-    // Paid leave has no fixed hour value, so it keeps its "有" label.
+    // Paid leave has no fixed hour value, so it keeps its "有" label. A
+    // custom dial-picker time range shows the actual "HH:MM〜HH:MM" range
+    // instead of just a plain hour count, so the admin can tell at a
+    // glance (without tapping in) exactly what was requested.
     final hoursValue = isBlank ? null : double.tryParse(entry.hours);
     final label = isBlank
         ? ''
-        : (isPaidLeave
-              ? ShiftCode.paidLeaveCode
-              : (hoursValue != null
-                    ? hoursValue.toStringAsFixed(2)
-                    : entry.code));
+        : (hasCustomTime
+              ? '${entry.customStartTime}\n〜${entry.customEndTime}'
+              : (isPaidLeave
+                    ? ShiftCode.paidLeaveCode
+                    : (hoursValue != null
+                          ? hoursValue.toStringAsFixed(2)
+                          : entry.code)));
 
     // Paid leave gets a distinct light-blue fill so it stands out clearly
-    // from a normal work shift; blank cells (day off) and weekend/holiday
-    // cells share the same moderate gray; a normal filled work day is
-    // plain white/transparent.
-    final Color cellColor = isPaidLeave
-        ? AppColors.paidLeaveBg
-        : ((isBlank || isHolidayCell) ? AppColors.holidayGray : Colors.transparent);
+    // from a normal work shift; a custom (non A~Y) dial-picker time range
+    // gets a bright yellow fill so it's immediately distinguishable from
+    // fixed-code shifts and needs a closer look via its detail popup;
+    // blank cells (day off) and weekend/holiday cells share the same
+    // moderate gray; a normal filled work day is plain white/transparent.
+    final Color cellColor = hasCustomTime
+        ? AppColors.customTimeCell
+        : (isPaidLeave
+              ? AppColors.paidLeaveBg
+              : ((isBlank || isHolidayCell)
+                    ? AppColors.holidayGray
+                    : Colors.transparent));
 
     // Every cell (including blank ones) is tappable so the admin can
     // manually correct/enter the day's hours by hand. In readOnly mode
     // (part-time staff's published view), cells are not editable - only
-    // a memo (if any) can be viewed.
+    // a memo (if any) can be viewed. A custom time-range day ALWAYS opens
+    // its detail popup first (in both modes), since simply glancing at a
+    // "13:15〜18:45"-style label crammed into a narrow day column isn't
+    // enough - tapping surfaces the full range clearly. The admin can
+    // still reach the normal edit sheet from a button inside that popup.
     return InkWell(
-      onTap: widget.readOnly
-          ? (hasMemo ? () => _showMemoDialog(row, entry, day) : null)
-          : () => _editHours(row, day),
+      onTap: hasCustomTime
+          ? () => _showCustomTimeDialog(row, entry, day)
+          : (widget.readOnly
+                ? (hasMemo ? () => _showMemoDialog(row, entry, day) : null)
+                : () => _editHours(row, day)),
       child: Container(
         width: _dayColWidth,
         height: _rowHeight,
@@ -1502,9 +1642,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                     : Alignment.center,
                 child: Text(
                   label,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 11 * _fontScale,
+                    fontSize: (hasCustomTime ? 8 : 11) * _fontScale,
                     color: AppColors.ink,
                   ),
                 ),

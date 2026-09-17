@@ -38,6 +38,19 @@ class AppColors {
   // so it stands out clearly from normal work-shift entries at a glance.
   static const Color paidLeave = Color(0xFF3FA9D6);
   static const Color paidLeaveBg = Color(0xFFE3F3FA);
+  // A day with a free-form dial-picker time range (doesn't match any
+  // fixed A~Y code) uses a distinct yellow, so both staff (day_cell) and
+  // admin (monthly shift matrix) recognize it at a glance as needing a
+  // closer look via its detail popup, rather than a normal fixed-code
+  // shift.
+  static const Color customTime = Color(0xFFC9A227);
+  static const Color customTimeBg = Color(0xFFFFF6D8);
+  // Stronger, more saturated yellow used specifically for the admin's
+  // monthly shift matrix cell fill (vs. the softer customTimeBg tint
+  // used behind the small badge on the staff-facing day_cell) - matches
+  // the "セルを黄色にして" request so it reads as an unambiguous yellow
+  // cell at a glance across the whole matrix.
+  static const Color customTimeCell = Color(0xFFFFEB3B);
 }
 
 class AppTheme {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/day_entry.dart';
 import '../models/shift_code.dart';
 import '../theme/app_theme.dart';
+import 'time_range_dial_picker.dart';
 
 /// A compact calendar-style day cell (used in a 7-column weekly grid).
 /// Tapping a non-holiday cell opens a bottom sheet to edit the shift
@@ -48,7 +49,9 @@ class DayCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isWeekend = entry.dayOfWeek == '日' || entry.dayOfWeek == '土';
-    final hasInput = entry.code.isNotEmpty || entry.hours.isNotEmpty;
+    final hasCustomTime = entry.hasCustomTime;
+    final hasInput =
+        entry.code.isNotEmpty || entry.hours.isNotEmpty || hasCustomTime;
     final hasMemo = entry.memo.isNotEmpty;
     final isPaidLeave = ShiftCode.isPaidLeave(entry.code);
 
@@ -57,13 +60,20 @@ class DayCell extends StatelessWidget {
       bg = AppColors.holidayBg;
     } else if (isWeekend) {
       bg = AppColors.weekendBg;
+    } else if (hasCustomTime) {
+      // Same yellow used in the admin's monthly matrix for a custom
+      // (non A~Y) time range, so staff recognize it as the same kind of
+      // entry across both screens.
+      bg = AppColors.customTimeBg;
     } else if (isPaidLeave) {
       bg = AppColors.paidLeaveBg;
     } else if (hasInput) {
       bg = AppColors.primary.withValues(alpha: 0.10);
     }
 
-    final accentColor = isPaidLeave ? AppColors.paidLeave : AppColors.primary;
+    final accentColor = hasCustomTime
+        ? AppColors.customTime
+        : (isPaidLeave ? AppColors.paidLeave : AppColors.primary);
     final canSelect = selectionMode && !entry.isHoliday;
 
     return InkWell(
@@ -121,9 +131,13 @@ class DayCell extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      entry.code.isNotEmpty ? entry.code : '${entry.hours}h',
+                      hasCustomTime
+                          ? '${entry.customStartTime}〜${entry.customEndTime}'
+                          : (entry.code.isNotEmpty
+                                ? entry.code
+                                : '${entry.hours}h'),
                       style: const TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -298,10 +312,99 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                   entry.paidLeaveHours = '';
                   _paidLeaveCode = '';
                 }
+                // A~Y is a distinct entry method from the custom dial-
+                // picker time range - picking a fixed symbol here means
+                // the day is no longer a "custom time" day, so clear any
+                // previously-entered custom start/end time to avoid the
+                // two conflicting representations coexisting.
+                entry.customStartTime = '';
+                entry.customEndTime = '';
               });
               widget.onChanged();
             },
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.schedule, size: 18),
+                  label: Text(
+                    entry.hasCustomTime
+                        ? '${entry.customStartTime}〜${entry.customEndTime}（変更）'
+                        : '任意の時間で入力',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: entry.hasCustomTime
+                        ? AppColors.customTime
+                        : AppColors.primaryDeep,
+                    side: BorderSide(
+                      color: entry.hasCustomTime
+                          ? AppColors.customTime
+                          : AppColors.primary,
+                    ),
+                  ),
+                  onPressed: () async {
+                    final result = await showTimeRangeDialPicker(
+                      context: context,
+                      initialStart: entry.customStartTime,
+                      initialEnd: entry.customEndTime,
+                    );
+                    if (result == null) return;
+                    // Compute the worked duration from the chosen range
+                    // (handling an end time past midnight as next-day,
+                    // matching showTimeRangeDialPicker's own duration
+                    // logic) so admin totals/exports keep working from
+                    // [entry.hours] unchanged, while the human-readable
+                    // range is preserved separately for display.
+                    final sParts = result.startTime.split(':');
+                    final eParts = result.endTime.split(':');
+                    final startMinutes =
+                        int.parse(sParts[0]) * 60 + int.parse(sParts[1]);
+                    var endMinutes =
+                        int.parse(eParts[0]) * 60 + int.parse(eParts[1]);
+                    if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+                    final durationHours =
+                        (endMinutes - startMinutes) / 60.0;
+                    setState(() {
+                      entry.customStartTime = result.startTime;
+                      entry.customEndTime = result.endTime;
+                      entry.hours = durationHours.toStringAsFixed(2);
+                      // A custom time range is a distinct entry method
+                      // from the fixed A~Y symbol - clear the code so
+                      // the two don't visually conflict (e.g. showing
+                      // both a letter badge and a time-range badge).
+                      _code = '';
+                      entry.code = '';
+                    });
+                    widget.onChanged();
+                  },
+                ),
+              ),
+              if (entry.hasCustomTime) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.clear, color: AppColors.inkMute),
+                  tooltip: '任意の時間をクリア',
+                  onPressed: () {
+                    setState(() {
+                      entry.customStartTime = '';
+                      entry.customEndTime = '';
+                      entry.hours = '';
+                    });
+                    widget.onChanged();
+                  },
+                ),
+              ],
+            ],
+          ),
+          if (entry.hasCustomTime) ...[
+            const SizedBox(height: 4),
+            const Text(
+              '※記号（A〜Y）を選ぶと、この任意の時間の入力は取り消されます。',
+              style: TextStyle(fontSize: 11, color: AppColors.inkMute),
+            ),
+          ],
           if (ShiftCode.isPaidLeave(_code)) ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
@@ -346,7 +449,7 @@ class _DayEditSheetState extends State<_DayEditSheet> {
             },
           ),
           const SizedBox(height: 16),
-          if (_code.isNotEmpty)
+          if (_code.isNotEmpty || entry.hasCustomTime)
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -359,6 +462,8 @@ class _DayEditSheetState extends State<_DayEditSheet> {
                     entry.hours = '';
                     entry.memo = '';
                     entry.paidLeaveHours = '';
+                    entry.customStartTime = '';
+                    entry.customEndTime = '';
                     _paidLeaveCode = '';
                     _memoController.clear();
                   });

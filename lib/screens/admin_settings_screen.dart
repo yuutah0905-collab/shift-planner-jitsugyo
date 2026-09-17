@@ -261,6 +261,90 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     setState(() => _employees.remove(e));
   }
 
+  /// Opens a dialog to rename an existing employee. Renaming only
+  /// changes this roster entry's [Employee.name] - it does NOT touch
+  /// any shift_submissions the person already made under their old
+  /// name, since those are independent Firestore documents (submitted
+  /// by the part-timer themselves, matched by name at submit-time - see
+  /// ShiftFormScreen._submit's PIN safety-net check). If the admin
+  /// renames someone here, staff should be told to also update the name
+  /// they type/select on their own submission going forward so future
+  /// submissions keep matching this roster entry (e.g. for the
+  /// "未提出者" check and PIN verification).
+  Future<void> _editEmployeeName(Employee employee) async {
+    final controller = TextEditingController(text: employee.name);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('氏名を編集'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              employee.department.isNotEmpty
+                  ? '部署：${employee.department}'
+                  : '',
+              style: const TextStyle(fontSize: 12, color: AppColors.inkMute),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: '氏名'),
+              onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              '※名前を変更すると、パートさん本人にも新しい名前で選択・入力してもらう'
+              '必要があります（過去に送信済みのシフトの氏名は変わりません）。',
+              style: TextStyle(fontSize: 11, color: AppColors.inkMute),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            onPressed: () =>
+                Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (result == null || result.isEmpty || result == employee.name) return;
+
+    final normalizedNew = Employee.normalizeName(result);
+    final duplicate = _employees.any(
+      (e) =>
+          e != employee &&
+          Employee.normalizeName(e.name) == normalizedNew &&
+          e.department == employee.department,
+    );
+    if (duplicate) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('同じ部署に同名の従業員が既に登録されています')),
+      );
+      return;
+    }
+
+    setState(() {
+      final idx = _employees.indexOf(employee);
+      if (idx != -1) {
+        _employees[idx] = Employee(
+          name: result,
+          department: employee.department,
+          pin: employee.pin,
+        );
+      }
+    });
+  }
+
   /// Employees currently visible in the roster list, narrowed to
   /// [_rosterFilterDept] (empty = show every department together). This
   /// is what feeds the ReorderableListView below - filtering by
@@ -718,6 +802,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                           ),
                         ),
                       ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: AppColors.primaryDeep,
+                      ),
+                      tooltip: '名前を編集',
+                      onPressed: () => _editEmployeeName(e),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 8),
                     IconButton(
                       icon: Icon(
                         e.pin.isNotEmpty

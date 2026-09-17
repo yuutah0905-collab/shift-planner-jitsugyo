@@ -35,11 +35,22 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '2.1';
+  static const String currentVersion = '2.2';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '2.2',
+      date: '2026-09-17',
+      notes: [
+        '従業員名簿で、名前を編集できるようになりました（鉛筆アイコンから変更できます）',
+        'シフト希望・任意メモの画面で、A〜Yの記号以外に「任意の時間」を入力できるようになりました',
+        '（ダイヤルを回して開始・終了時刻を選べます。回している間はカリカリ音が鳴ります）',
+        '任意の時間を入力した日は、月間シフト一覧表でそのマスが黄色く表示されるようになりました',
+        '（黄色いマスをタップすると、入力した時間の詳細を確認できます）',
+      ],
+    ),
     UpdateEntry(
       version: '2.1',
       date: '2026-09-17',

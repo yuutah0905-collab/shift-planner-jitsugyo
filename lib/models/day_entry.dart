@@ -16,6 +16,18 @@ class DayEntry {
   /// estimate without affecting the admin-facing total worked hours.
   String paidLeaveHours;
 
+  /// Free-form start/end time ("HH:MM", 24h) entered via the dial-style
+  /// time-range picker, for days that don't fit one of the fixed A~Y
+  /// symbol codes. When both are non-empty, this day is shown with a
+  /// distinct yellow highlight in the admin's monthly shift matrix (see
+  /// MonthlyShiftMatrixScreen) so the exact requested time range can be
+  /// checked at a glance instead of just a plain hour count. [hours] is
+  /// still kept in sync (computed duration) so admin totals/exports
+  /// continue to work unchanged; these two fields exist purely to
+  /// preserve the human-readable time range for display.
+  String customStartTime;
+  String customEndTime;
+
   DayEntry({
     required this.date,
     required this.dayOfWeek,
@@ -24,9 +36,15 @@ class DayEntry {
     this.code = '',
     this.memo = '',
     this.paidLeaveHours = '',
+    this.customStartTime = '',
+    this.customEndTime = '',
   });
 
   int get day => int.parse(date.split('-')[2]);
+
+  /// True once both a custom start and end time have been entered via
+  /// the dial-style time-range picker (see [customStartTime]).
+  bool get hasCustomTime => customStartTime.isNotEmpty && customEndTime.isNotEmpty;
 
   Map<String, dynamic> toMap() => {
     'date': date,
@@ -36,6 +54,8 @@ class DayEntry {
     'code': code,
     'memo': memo,
     'paidLeaveHours': paidLeaveHours,
+    'customStartTime': customStartTime,
+    'customEndTime': customEndTime,
   };
 
   factory DayEntry.fromMap(Map<String, dynamic> map) => DayEntry(
@@ -46,5 +66,7 @@ class DayEntry {
     code: map['code']?.toString() ?? '',
     memo: map['memo']?.toString() ?? '',
     paidLeaveHours: map['paidLeaveHours']?.toString() ?? '',
+    customStartTime: map['customStartTime']?.toString() ?? '',
+    customEndTime: map['customEndTime']?.toString() ?? '',
   );
 }

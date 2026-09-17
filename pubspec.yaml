@@ -53,6 +53,7 @@ dependencies:
   # Japanese localization support (required for date pickers, etc.)
   flutter_localizations:
     sdk: flutter
+  audioplayers: 6.7.1
 
 dev_dependencies:
   flutter_test:
@@ -79,6 +80,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/icon/jitsugyo_logo.png
+    - assets/sounds/dial_tick.mp3
 
   fonts:
     - family: NotoSansJP
