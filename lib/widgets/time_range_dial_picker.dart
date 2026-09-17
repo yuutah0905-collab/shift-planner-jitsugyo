@@ -66,21 +66,34 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   late int _endMinute;
   late bool _hasBreak;
 
-  // Reused between all 4 wheels rather than one AudioPlayer per wheel -
-  // rapid scrolling can fire many ticks per second, and starting a new
-  // player for each one would be wasteful. AudioPlayer supports being
-  // told to play the same source again while already playing (it just
-  // restarts), which is exactly the rapid-fire "dial spinning" behavior
-  // we want.
-  late final AudioPlayer _tickPlayer;
+  // A pool of several pre-loaded AudioPlayers for the tick sound, rather
+  // than a single shared player. Rapid dial scrolling can fire many
+  // ticks per second (one per notch, via onSelectedItemChanged); reusing
+  // ONE player by calling seek(0) + resume() on it back-to-back caused a
+  // race on Web (each call replaces the previous, unfinished play()
+  // request on the underlying <audio> element, which the browser then
+  // rejects with an unhandled "play() request was interrupted" error) -
+  // the sound silently stopped playing while haptic feedback (a separate,
+  // synchronous platform channel call) kept working, which is exactly
+  // the "振動だけになる" symptom this pool-based approach fixes: each tick
+  // grabs its own available player from the pool instead of fighting
+  // over a single one.
+  AudioPool? _tickPool;
 
   @override
   void initState() {
     super.initState();
-    _tickPlayer = AudioPlayer()..setReleaseMode(ReleaseMode.stop);
-    // Pre-set the low-latency-friendly source so the very first tick
-    // isn't delayed by a network/asset lookup.
-    _tickPlayer.setSource(AssetSource('sounds/dial_tick.mp3'));
+    AudioPool.createFromAsset(
+      path: 'sounds/dial_tick.mp3',
+      maxPlayers: 6,
+      minPlayers: 3,
+    ).then((pool) {
+      if (mounted) {
+        _tickPool = pool;
+      } else {
+        pool.dispose();
+      }
+    });
 
     _hasBreak = widget.initialHasBreak;
 
@@ -104,7 +117,7 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
 
   @override
   void dispose() {
-    _tickPlayer.dispose();
+    _tickPool?.dispose();
     super.dispose();
   }
 
@@ -113,12 +126,12 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   /// Also fires a tiny haptic tick on platforms that support it, so the
   /// feedback isn't purely audio-only (e.g. if the device is muted).
   void _playTick() {
-    // seek(0) + resume() restarts playback from the beginning even if a
-    // previous tick's sound is still finishing - important for fast
-    // scrolling where ticks can fire faster than the 40ms clip's own
-    // length.
-    _tickPlayer.seek(Duration.zero);
-    _tickPlayer.resume();
+    // Fire-and-forget: AudioPool.start() hands back a per-tick player
+    // from the pool (creating a new one if all are busy), so rapid
+    // scrolling never has two ticks fighting over the same player's
+    // play()/seek() state - each tick's sound is free to finish (or be
+    // cut off by the pool reclaiming it) independently of the others.
+    _tickPool?.start();
     HapticFeedback.selectionClick();
   }
 

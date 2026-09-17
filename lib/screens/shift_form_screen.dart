@@ -13,6 +13,7 @@ import '../services/local_storage_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/day_cell.dart';
 import '../widgets/summary_card.dart';
+import '../widgets/time_range_dial_picker.dart';
 import 'admin_login_screen.dart';
 import 'help_screen.dart';
 import 'monthly_shift_matrix_screen.dart';
@@ -498,29 +499,34 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
       _showSnack('日にちを1つ以上選択してください');
       return;
     }
-    await showModalBottomSheet(
+    final result = await showModalBottomSheet<_BulkApplyResult>(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => _BulkApplySheet(count: _selectedDates.length),
-    ).then((code) {
-      if (code == null) return; // cancelled
-      setState(() {
-        for (final date in _selectedDates) {
-          final entry = _days[date];
-          if (entry == null || entry.isHoliday) continue;
-          if (code == _bulkClearSentinel) {
-            entry.code = '';
-            entry.hours = '';
-            // Also clear any leftover paid-leave hours entered for the
-            // salary calculator - otherwise bulk-clearing a day that was
-            // previously '有' leaves stale hours counted toward the
-            // personal salary estimate even though the day is now blank.
-            entry.paidLeaveHours = '';
-          } else {
-            entry.code = code;
+    );
+    if (result == null) return; // cancelled
+    setState(() {
+      for (final date in _selectedDates) {
+        final entry = _days[date];
+        if (entry == null || entry.isHoliday) continue;
+        if (result.clear) {
+          entry.code = '';
+          entry.hours = '';
+          entry.customStartTime = '';
+          entry.customEndTime = '';
+          entry.customHasBreak = false;
+          // Also clear any leftover paid-leave hours entered for the
+          // salary calculator - otherwise bulk-clearing a day that was
+          // previously '有' leaves stale hours counted toward the
+          // personal salary estimate even though the day is now blank.
+          entry.paidLeaveHours = '';
+        } else {
+          final code = result.code ?? '';
+          entry.code = code;
+          if (code.isNotEmpty) {
             final h = ShiftCode.hoursForCode(code);
             entry.hours = h != null ? h.toStringAsFixed(2) : '';
             // Bulk-applying a normal A〜Y code (not '有') also needs to
@@ -530,13 +536,29 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
               entry.paidLeaveHours = '';
             }
           }
+          if (result.hasCustomTime) {
+            entry.customStartTime = result.customStartTime!;
+            entry.customEndTime = result.customEndTime!;
+            entry.customHasBreak = result.customHasBreak;
+            // A symbol (if also chosen) keeps driving the admin-facing
+            // hours - the custom time is otherwise purely a human
+            // readable reference of the actual clock time (same
+            // coexistence rule as the single-day edit sheet).
+            if (code.isEmpty) {
+              entry.hours = DayEntry.durationHoursBetween(
+                result.customStartTime!,
+                result.customEndTime!,
+                hasBreak: result.customHasBreak,
+              ).toStringAsFixed(2);
+            }
+          }
         }
-        _bulkMode = false;
-        _selectedDates.clear();
-      });
-      _saveLocal();
-      _showSnack('一括で入力しました');
+      }
+      _bulkMode = false;
+      _selectedDates.clear();
     });
+    _saveLocal();
+    _showSnack('一括で入力しました');
   }
 
   double get _totalHours {
@@ -580,8 +602,6 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     final today = DateTime(now.year, now.month, now.day);
     return today.isAfter(deadlineDate);
   }
-
-  static const String _bulkClearSentinel = '__clear__';
 
   Future<void> _submit() async {
     if (_isPastDeadline) {
@@ -1605,11 +1625,36 @@ class _NamePickerSheet extends StatelessWidget {
   }
 }
 
+/// Result of [_BulkApplySheet]: either a shift code and/or a custom time
+/// range (the two can coexist, same as the single-day edit sheet), or
+/// [clear] = true meaning "clear every selected day's input instead".
+class _BulkApplyResult {
+  final String? code;
+  final String? customStartTime;
+  final String? customEndTime;
+  final bool customHasBreak;
+  final bool clear;
+
+  const _BulkApplyResult({
+    this.code,
+    this.customStartTime,
+    this.customEndTime,
+    this.customHasBreak = false,
+    this.clear = false,
+  });
+
+  bool get hasCustomTime =>
+      customStartTime != null &&
+      customStartTime!.isNotEmpty &&
+      customEndTime != null &&
+      customEndTime!.isNotEmpty;
+}
+
 /// Bottom sheet used by the bulk-input feature: lets the admin/staff pick
-/// a single code (A~Y or 有) to apply to every currently-selected day at
-/// once, or clear the selected days entirely. Returns the chosen code
-/// string via Navigator.pop, or `_ShiftFormScreenState._bulkClearSentinel`
-/// when "選択日をクリア" is chosen, or null if dismissed without a choice.
+/// a symbol code (A~Y or 有) AND/OR a custom (任意の) time range to apply
+/// to every currently-selected day at once, or clear the selected days
+/// entirely. Returns a [_BulkApplyResult] via Navigator.pop, or null if
+/// dismissed without a choice.
 class _BulkApplySheet extends StatefulWidget {
   final int count;
 
@@ -1621,6 +1666,11 @@ class _BulkApplySheet extends StatefulWidget {
 
 class _BulkApplySheetState extends State<_BulkApplySheet> {
   String? _code;
+  String _customStart = '';
+  String _customEnd = '';
+  bool _customHasBreak = false;
+
+  bool get _hasCustomTime => _customStart.isNotEmpty && _customEnd.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -1652,6 +1702,11 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
               ),
             ],
           ),
+          const SizedBox(height: 2),
+          const Text(
+            '記号・任意の時間のどちらか、または両方を選んで適用できます',
+            style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _code,
@@ -1677,6 +1732,66 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
             ],
             onChanged: (val) => setState(() => _code = val),
           ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.schedule, size: 18),
+                  label: Text(
+                    _hasCustomTime
+                        ? '$_customStart〜$_customEnd（変更）'
+                        : '任意の時間で入力',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _hasCustomTime
+                        ? AppColors.customTime
+                        : AppColors.primaryDeep,
+                    side: BorderSide(
+                      color: _hasCustomTime
+                          ? AppColors.customTime
+                          : AppColors.primary,
+                    ),
+                  ),
+                  onPressed: () async {
+                    final result = await showTimeRangeDialPicker(
+                      context: context,
+                      initialStart: _customStart,
+                      initialEnd: _customEnd,
+                      initialHasBreak: _customHasBreak,
+                    );
+                    if (result == null) return;
+                    setState(() {
+                      _customStart = result.startTime;
+                      _customEnd = result.endTime;
+                      _customHasBreak = result.hasBreak;
+                    });
+                  },
+                ),
+              ),
+              if (_hasCustomTime) ...[
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.clear, color: AppColors.inkMute),
+                  tooltip: '任意の時間をクリア',
+                  onPressed: () {
+                    setState(() {
+                      _customStart = '';
+                      _customEnd = '';
+                      _customHasBreak = false;
+                    });
+                  },
+                ),
+              ],
+            ],
+          ),
+          if (_hasCustomTime) ...[
+            const SizedBox(height: 4),
+            Text(
+              _customHasBreak ? '（10分休憩あり）' : '（10分休憩なし）',
+              style: const TextStyle(fontSize: 11, color: AppColors.inkMute),
+            ),
+          ],
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
@@ -1685,16 +1800,23 @@ class _BulkApplySheetState extends State<_BulkApplySheet> {
               label: const Text('選択日の入力をクリア'),
               onPressed: () => Navigator.of(
                 context,
-              ).pop(_ShiftFormScreenState._bulkClearSentinel),
+              ).pop(const _BulkApplyResult(clear: true)),
             ),
           ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _code == null
+              onPressed: (_code == null && !_hasCustomTime)
                   ? null
-                  : () => Navigator.of(context).pop(_code),
+                  : () => Navigator.of(context).pop(
+                      _BulkApplyResult(
+                        code: _code,
+                        customStartTime: _hasCustomTime ? _customStart : null,
+                        customEndTime: _hasCustomTime ? _customEnd : null,
+                        customHasBreak: _customHasBreak,
+                      ),
+                    ),
               child: const Text('適用'),
             ),
           ),
