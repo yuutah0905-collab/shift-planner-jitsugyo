@@ -617,6 +617,24 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     return total;
   }
 
+  /// True if [day] is a weekend/company holiday - checked the same way
+  /// as a normal data cell (per-entry `isHoliday` flag if any row has an
+  /// entry for that date, otherwise fall back to weekend). Used by the
+  /// footer "合計" row so holiday columns keep their gray background
+  /// instead of being flagged red by the under-staffed check, even when
+  /// their total is (correctly) 0 or low because nobody is scheduled to
+  /// work that day.
+  bool _isHolidayDay(List<_PersonRow> rows, int day) {
+    final dow = _weekdayOf(day);
+    final isWeekend = dow == 0 || dow == 6;
+    final key = _dateKey(day);
+    for (final row in rows) {
+      final entry = row.entriesByDate[key];
+      if (entry != null) return entry.isHoliday;
+    }
+    return isWeekend;
+  }
+
   /// Grand total across the whole month, for the bottom-right corner of
   /// the footer row (sum of every day's total = sum of every person's
   /// total).
@@ -1356,7 +1374,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       child: Row(
         children: [
           for (int day = 1; day <= _daysInMonth; day++)
-            _totalDayCell(_totalHoursForDay(rows, day)),
+            _totalDayCell(
+              _totalHoursForDay(rows, day),
+              _isHolidayDay(rows, day),
+            ),
           Container(
             width: _totalColWidth,
             alignment: Alignment.center,
@@ -1390,16 +1411,21 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// warning so the admin notices at a glance without adding up numbers.
   static const double _minDailyTotalHours = 25.0;
 
-  Widget _totalDayCell(double hours) {
-    final isUnderStaffed = hours < _minDailyTotalHours;
+  /// [isHoliday] = true skips the red under-staffed highlight entirely
+  /// (holiday columns keep their normal gray background even if nobody's
+  /// scheduled - that's expected, not a staffing problem) and keeps the
+  /// day's usual gray fill for consistency with the data rows above it.
+  Widget _totalDayCell(double hours, bool isHoliday) {
+    final isUnderStaffed = !isHoliday && hours < _minDailyTotalHours;
+    final Color bg = isUnderStaffed
+        ? Colors.red
+        : (isHoliday ? AppColors.holidayGray : Colors.transparent);
     return Container(
       width: _dayColWidth,
       height: _rowHeight,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isUnderStaffed
-            ? Colors.red.withValues(alpha: 0.55)
-            : Colors.transparent,
+        color: bg,
         border: const Border(
           right: BorderSide(color: AppColors.gridLine, width: 0.6),
         ),
