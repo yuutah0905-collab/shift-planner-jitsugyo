@@ -60,10 +60,26 @@ class _TimeRangeDialSheet extends StatefulWidget {
 }
 
 class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
-  late int _startHour;
-  late int _startMinute; // in 5-minute steps (0,5,10...55)
-  late int _endHour;
-  late int _endMinute;
+  // NOTE: these are NOT plain State fields updated via setState() - see
+  // _startHourN/_startMinuteN/_endHourN/_endMinuteN below. Scrolling a wheel
+  // fires onSelectedItemChanged once per notch (many times per second during
+  // a fast flick); if each of those called setState() on this State, EVERY
+  // notch would re-run build() for the ENTIRE sheet - all 4 dial columns,
+  // the summary text, the break chips and the confirm button - even though
+  // visually nothing but the summary text actually needs to change. That
+  // extra rebuild work is pure waste, and while cheap enough on Android's
+  // native Skia engine to go unnoticed, it's far more expensive under
+  // Flutter Web's CanvasKit-on-WebAssembly execution on iOS Safari - which
+  // matches exactly what was reported ("Androidはスムーズ、iPhoneはカクカク"
+  // after two earlier tick-sound/controller fixes that didn't touch this).
+  // Fix: hold the four wheel values in ValueNotifiers instead, updated with
+  // NO setState() call at all during scrolling, and rebuild only the small
+  // summary Text via AnimatedBuilder/Listenable.merge - the dial columns
+  // themselves never rebuild while scrolling.
+  late final ValueNotifier<int> _startHourN;
+  late final ValueNotifier<int> _startMinuteN; // in 5-minute steps (0,5,...,55)
+  late final ValueNotifier<int> _endHourN;
+  late final ValueNotifier<int> _endMinuteN;
   late bool _hasBreak;
 
   // One FixedExtentScrollController per wheel, created ONCE in initState
@@ -114,31 +130,40 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     _hasBreak = widget.initialHasBreak;
 
     final startParts = widget.initialStart.split(':');
+    final int initStartHour;
+    final int initStartMinute;
     if (startParts.length == 2) {
-      _startHour = int.tryParse(startParts[0]) ?? 9;
-      _startMinute = (int.tryParse(startParts[1]) ?? 0) ~/ 5 * 5;
+      initStartHour = int.tryParse(startParts[0]) ?? 9;
+      initStartMinute = (int.tryParse(startParts[1]) ?? 0) ~/ 5 * 5;
     } else {
-      _startHour = 9;
-      _startMinute = 0;
+      initStartHour = 9;
+      initStartMinute = 0;
     }
     final endParts = widget.initialEnd.split(':');
+    final int initEndHour;
+    final int initEndMinute;
     if (endParts.length == 2) {
-      _endHour = int.tryParse(endParts[0]) ?? 17;
-      _endMinute = (int.tryParse(endParts[1]) ?? 0) ~/ 5 * 5;
+      initEndHour = int.tryParse(endParts[0]) ?? 17;
+      initEndMinute = (int.tryParse(endParts[1]) ?? 0) ~/ 5 * 5;
     } else {
-      _endHour = 17;
-      _endMinute = 0;
+      initEndHour = 17;
+      initEndMinute = 0;
     }
 
+    _startHourN = ValueNotifier(initStartHour);
+    _startMinuteN = ValueNotifier(initStartMinute);
+    _endHourN = ValueNotifier(initEndHour);
+    _endMinuteN = ValueNotifier(initEndMinute);
+
     _startHourController = FixedExtentScrollController(
-      initialItem: _startHour,
+      initialItem: initStartHour,
     );
     _startMinuteController = FixedExtentScrollController(
-      initialItem: _startMinute ~/ 5,
+      initialItem: initStartMinute ~/ 5,
     );
-    _endHourController = FixedExtentScrollController(initialItem: _endHour);
+    _endHourController = FixedExtentScrollController(initialItem: initEndHour);
     _endMinuteController = FixedExtentScrollController(
-      initialItem: _endMinute ~/ 5,
+      initialItem: initEndMinute ~/ 5,
     );
   }
 
@@ -149,6 +174,10 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     _startMinuteController.dispose();
     _endHourController.dispose();
     _endMinuteController.dispose();
+    _startHourN.dispose();
+    _startMinuteN.dispose();
+    _endHourN.dispose();
+    _endMinuteN.dispose();
     super.dispose();
   }
 
@@ -172,10 +201,11 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     HapticFeedback.selectionClick();
   }
 
-  String get _startLabel =>
-      '${_startHour.toString().padLeft(2, '0')}:${_startMinute.toString().padLeft(2, '0')}';
-  String get _endLabel =>
-      '${_endHour.toString().padLeft(2, '0')}:${_endMinute.toString().padLeft(2, '0')}';
+  static String _fmt(int hour, int minute) =>
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+  String get _startLabel => _fmt(_startHourN.value, _startMinuteN.value);
+  String get _endLabel => _fmt(_endHourN.value, _endMinuteN.value);
 
   /// Duration in hours between start and end, treating end <= start as
   /// spanning into the next day (e.g. a night shift 22:00〜翌6:00) and
@@ -190,9 +220,9 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
 
   void _confirm() {
     if (_durationHours <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('終了時刻は開始時刻より後にしてください')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('終了時刻は開始時刻より後にしてください')));
       return;
     }
     Navigator.of(context).pop(
@@ -248,8 +278,14 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
                   label: '開始',
                   hourController: _startHourController,
                   minuteController: _startMinuteController,
-                  onHourChanged: (v) => setState(() => _startHour = v),
-                  onMinuteChanged: (v) => setState(() => _startMinute = v),
+                  // IMPORTANT: no setState() here - see the comment on the
+                  // ValueNotifier fields above. Updating the notifier's
+                  // .value does NOT rebuild this sheet; only the small
+                  // AnimatedBuilder-wrapped summary Text below listens for
+                  // it, so a fast flick through many notches never re-runs
+                  // this whole build() method.
+                  onHourChanged: (v) => _startHourN.value = v,
+                  onMinuteChanged: (v) => _startMinuteN.value = v,
                 ),
               ),
               const Padding(
@@ -261,8 +297,8 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
                   label: '終了',
                   hourController: _endHourController,
                   minuteController: _endMinuteController,
-                  onHourChanged: (v) => setState(() => _endHour = v),
-                  onMinuteChanged: (v) => setState(() => _endMinute = v),
+                  onHourChanged: (v) => _endHourN.value = v,
+                  onMinuteChanged: (v) => _endMinuteN.value = v,
                 ),
               ),
             ],
@@ -275,18 +311,25 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
               color: AppColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '$_startLabel 〜 $_endLabel',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primaryDeep,
-                    fontSize: 16,
-                  ),
+            alignment: Alignment.center,
+            // Only this Text rebuilds as the dials scroll (via the merged
+            // ValueNotifiers below) - the rest of the sheet (dial columns,
+            // break chips, confirm button) is untouched by scrolling.
+            child: AnimatedBuilder(
+              animation: Listenable.merge([
+                _startHourN,
+                _startMinuteN,
+                _endHourN,
+                _endMinuteN,
+              ]),
+              builder: (context, _) => Text(
+                '${_fmt(_startHourN.value, _startMinuteN.value)} 〜 ${_fmt(_endHourN.value, _endMinuteN.value)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primaryDeep,
+                  fontSize: 16,
                 ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
