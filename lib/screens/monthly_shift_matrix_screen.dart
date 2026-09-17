@@ -1602,15 +1602,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // internal shorthand for data entry, not what should be printed/shown.
     // Paid leave has no fixed hour value, so it keeps its "有" label. A
     // custom dial-picker time range shows its computed hour count (e.g.
-    // "6.00h") rather than the raw "HH:MM〜HH:MM" range, since the exact
-    // clock time is available on tap via the detail popup - the cell
-    // itself just needs to say "this day used a custom time" (via its
-    // yellow fill) and roughly how many hours.
+    // "6.00", no "h" suffix - matches the plain numeric style used by
+    // every other filled-in cell) rather than the raw "HH:MM〜HH:MM"
+    // range, since the exact clock time is available on tap via the
+    // detail popup - the cell itself just needs to say "this day used a
+    // custom time" (via its yellow fill) and roughly how many hours.
     final hoursValue = isBlank ? null : double.tryParse(entry.hours);
     final label = isBlank
         ? ''
         : (hasCustomTime
-              ? '${hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.hours}h'
+              ? (hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.hours)
               : (isPaidLeave
                     ? ShiftCode.paidLeaveCode
                     : (hoursValue != null
