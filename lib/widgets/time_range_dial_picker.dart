@@ -1,8 +1,8 @@
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/day_entry.dart';
 import '../theme/app_theme.dart';
+import 'tick_sound_stub.dart';
 
 /// Result of [showTimeRangeDialPicker]: the selected start/end time as
 /// "HH:MM" (24h) strings, plus whether a 10-minute break was selected,
@@ -78,16 +78,12 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
   // the "振動だけになる" symptom this pool-based approach fixes: each tick
   // grabs its own available player from the pool instead of fighting
   // over a single one.
-  AudioPool? _tickPool;
+  TickSoundPool? _tickPool;
 
   @override
   void initState() {
     super.initState();
-    AudioPool.createFromAsset(
-      path: 'sounds/dial_tick.mp3',
-      maxPlayers: 6,
-      minPlayers: 3,
-    ).then((pool) {
+    TickSoundPool.create(assetPath: 'sounds/dial_tick.mp3').then((pool) {
       if (mounted) {
         _tickPool = pool;
       } else {
@@ -131,7 +127,13 @@ class _TimeRangeDialSheetState extends State<_TimeRangeDialSheet> {
     // scrolling never has two ticks fighting over the same player's
     // play()/seek() state - each tick's sound is free to finish (or be
     // cut off by the pool reclaiming it) independently of the others.
-    _tickPool?.start();
+    // volume is explicit (not just relying on the 1.0 default) because
+    // the original tick audio asset turned out to be a very quiet,
+    // mostly-silence 1s clip - too faint to notice on Web even with a
+    // fully-connected, error-free playback path. It's been replaced with
+    // a short (~80ms), louder synthesized click, and volume is pinned to
+    // 1.0 here so this never silently regresses if the default changes.
+    _tickPool?.play();
     HapticFeedback.selectionClick();
   }
 

@@ -53,7 +53,13 @@ dependencies:
   # Japanese localization support (required for date pickers, etc.)
   flutter_localizations:
     sdk: flutter
+
+  # Dial-picker tick sound: audioplayers for Android/iOS/desktop, plus
+  # package:web (direct dep) for the Web-only raw <audio> fallback in
+  # tick_sound_web.dart (see that file for why audioplayers' AudioPool
+  # doesn't work reliably on Web in this environment).
   audioplayers: 6.7.1
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
