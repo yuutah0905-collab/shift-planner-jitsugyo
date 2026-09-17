@@ -234,10 +234,7 @@ class FirestoreService {
     required String department,
     required String newName,
   }) async {
-    final normalizedOld = oldName.replaceAll(
-      RegExp(r'[\s\u3000]+'),
-      '',
-    ).trim().toLowerCase();
+    final normalizedOld = Employee.normalizeName(oldName);
     if (normalizedOld.isEmpty || oldName == newName) return;
 
     final querySnapshot = await _db
@@ -249,10 +246,7 @@ class FirestoreService {
     var matched = 0;
     for (final doc in querySnapshot.docs) {
       final docName = doc.data()['name']?.toString() ?? '';
-      final normalizedDocName = docName.replaceAll(
-        RegExp(r'[\s\u3000]+'),
-        '',
-      ).trim().toLowerCase();
+      final normalizedDocName = Employee.normalizeName(docName);
       if (normalizedDocName == normalizedOld) {
         batch.update(doc.reference, {'name': newName});
         matched++;
