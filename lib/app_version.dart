@@ -35,11 +35,20 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '2.0';
+  static const String currentVersion = '2.1';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '2.1',
+      date: '2026-09-17',
+      notes: [
+        '月間シフト一覧表の「合計」欄の色をグレーから白に変更しました',
+        'その日の合計時間が25時間未満の場合、その日の合計マスが赤く表示されるようになりました',
+        '名前が長い方でも、枠に収まるよう自動でフォントサイズが縮小されるようになりました',
+      ],
+    ),
     UpdateEntry(
       version: '2.0',
       date: '2026-09-01',

@@ -1116,13 +1116,25 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                               width: 0.6,
                             ),
                           ),
-                          child: Text(
-                            rows[i].name,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12 * _fontScale,
+                          // FittedBox + scaleDown auto-shrinks the font
+                          // just enough for long names (e.g. names with
+                          // many kanji/characters) to fit the fixed-width
+                          // name column on one line, instead of getting
+                          // clipped by ellipsis like a plain Text would.
+                          // Short names are unaffected - FittedBox never
+                          // scales UP past the natural 12 * _fontScale
+                          // size, only down.
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              rows[i].name,
+                              maxLines: 1,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12 * _fontScale,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       // "合計" label row, aligned with the footer totals
@@ -1133,7 +1145,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         alignment: Alignment.centerLeft,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         decoration: const BoxDecoration(
-                          color: AppColors.holidayGray,
+                          color: AppColors.surface,
                           border: Border(
                             left: BorderSide(color: AppColors.gridLine, width: 0.6),
                             right: BorderSide(color: AppColors.gridLine, width: 0.6),
@@ -1336,7 +1348,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     return Container(
       height: _rowHeight,
       decoration: const BoxDecoration(
-        color: AppColors.holidayGray,
+        color: AppColors.surface,
         border: Border(
           top: BorderSide(color: AppColors.primaryDeep, width: 1.4),
         ),
@@ -1372,20 +1384,32 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     );
   }
 
+  /// Minimum total hours (summed across everyone in the currently
+  /// filtered department) required to cover a single day's shift. Below
+  /// this, that day's footer cell is highlighted red as a "understaffed"
+  /// warning so the admin notices at a glance without adding up numbers.
+  static const double _minDailyTotalHours = 25.0;
+
   Widget _totalDayCell(double hours) {
+    final isUnderStaffed = hours < _minDailyTotalHours;
     return Container(
       width: _dayColWidth,
       height: _rowHeight,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: AppColors.gridLine, width: 0.6)),
+      decoration: BoxDecoration(
+        color: isUnderStaffed
+            ? Colors.red.withValues(alpha: 0.55)
+            : Colors.transparent,
+        border: const Border(
+          right: BorderSide(color: AppColors.gridLine, width: 0.6),
+        ),
       ),
       child: Text(
         hours > 0 ? hours.toStringAsFixed(2) : '',
         style: TextStyle(
           fontWeight: FontWeight.bold,
           fontSize: 10 * _fontScale,
-          color: AppColors.ink,
+          color: isUnderStaffed ? Colors.white : AppColors.ink,
         ),
       ),
     );
