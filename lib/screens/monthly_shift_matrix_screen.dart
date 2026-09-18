@@ -699,17 +699,23 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   /// a small "時間を修正" button is offered here so the admin isn't
   /// stuck unable to reach the normal edit sheet for that day.
   void _showCustomTimeDialog(_PersonRow row, DayEntry entry, int day) {
+    // The bright "customTime" yellow/gold accent is deliberately only used
+    // in the ADMIN's own editing view, to help the admin spot custom-time
+    // entries at a glance. In the readOnly staff-facing view (the matrix
+    // published/distributed to part-time staff), this popup must look
+    // like any other plain detail view - no yellow highlight - matching
+    // the cell itself, which already skips the yellow fill in readOnly
+    // mode (see `cellColor` in `_dataCell`).
+    final accentColor = widget.readOnly ? AppColors.ink : AppColors.customTime;
+    final accentBg = widget.readOnly ? AppColors.surface : AppColors.customTimeBg;
+    final accentBorder = widget.readOnly ? AppColors.line : AppColors.customTime.withValues(alpha: 0.4);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
-            const Icon(
-              Icons.schedule,
-              color: AppColors.customTime,
-              size: 20,
-            ),
+            Icon(Icons.schedule, color: accentColor, size: 20),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -735,21 +741,19 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.customTimeBg,
+                color: accentBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.customTime.withValues(alpha: 0.4),
-                ),
+                border: Border.all(color: accentBorder),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '${entry.customStartTime} 〜 ${entry.customEndTime}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.customTime,
+                      color: accentColor,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -759,7 +763,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         Icons.free_breakfast_outlined,
                         size: 14,
                         color: entry.customHasBreak
-                            ? AppColors.customTime
+                            ? accentColor
                             : AppColors.inkMute,
                       ),
                       const SizedBox(width: 4),
