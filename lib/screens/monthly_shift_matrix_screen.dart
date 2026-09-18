@@ -1620,11 +1620,15 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
 
     // Paid leave gets a distinct light-blue fill so it stands out clearly
     // from a normal work shift; a custom (non A~Y) dial-picker time range
-    // gets a bright yellow fill so it's immediately distinguishable from
-    // fixed-code shifts and needs a closer look via its detail popup;
+    // gets a bright yellow fill so the admin can immediately spot it and
+    // needs a closer look via its detail popup - but ONLY in the admin's
+    // own editing view. In the readOnly staff-facing view (the matrix that
+    // gets published/distributed to part-time staff), a custom time day
+    // is shown with the normal plain background like any other filled
+    // work day, since staff shouldn't see it visually flagged/highlighted;
     // blank cells (day off) and weekend/holiday cells share the same
     // moderate gray; a normal filled work day is plain white/transparent.
-    final Color cellColor = hasCustomTime
+    final Color cellColor = (hasCustomTime && !widget.readOnly)
         ? AppColors.customTimeCell
         : (isPaidLeave
               ? AppColors.paidLeaveBg
