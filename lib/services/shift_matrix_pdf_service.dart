@@ -303,6 +303,24 @@ class ShiftMatrixPdfService {
 
     final grandTotalHours = rows.fold<double>(0.0, (s, r) => s + r.totalHours);
 
+    // True if [day] is a weekend/company holiday - checked the same way as
+    // a normal data cell (per-entry `isHoliday` flag if any row has an
+    // entry for that date, otherwise fall back to weekend). Mirrors
+    // `_isHolidayDay` in monthly_shift_matrix_screen.dart so the printed
+    // "合計" footer row's per-day cells only get the gray holiday fill on
+    // an actual holiday column, matching the on-screen matrix, instead of
+    // graying out every day including normal work days.
+    bool isHolidayDay(int day) {
+      final dow = weekdayOf(day).toInt();
+      final isWeekend = dow == 0 || dow == 6;
+      final key = dateKey(day);
+      for (final row in rows) {
+        final entry = row.entriesByDate[key];
+        if (entry != null) return entry.isHoliday;
+      }
+      return isWeekend;
+    }
+
     pw.Widget headerDayCell(int day) {
       final dow = weekdayOf(day).toInt();
       final isWeekend = dow == 0 || dow == 6;
@@ -419,12 +437,13 @@ class ShiftMatrixPdfService {
       );
     }
 
-    pw.Widget totalDayCell(double hours) {
+    pw.Widget totalDayCell(double hours, bool isHoliday) {
       return pw.Container(
         width: dayColWidth,
         height: rowHeight,
         alignment: pw.Alignment.center,
         decoration: pw.BoxDecoration(
+          color: isHoliday ? _holidayGray : _surface,
           border: pw.Border.all(color: _gridLine, width: 0.4),
         ),
         child: pw.Text(
@@ -480,7 +499,9 @@ class ShiftMatrixPdfService {
           alignment: pw.Alignment.centerLeft,
           padding: const pw.EdgeInsets.symmetric(horizontal: 4),
           decoration: pw.BoxDecoration(
-            color: _holidayGray,
+            // Matches the on-screen "合計" label cell (AppColors.surface,
+            // i.e. plain white) rather than the moderate holiday gray.
+            color: _surface,
             border: pw.Border(
               left: pw.BorderSide(color: _gridLine, width: 0.4),
               right: pw.BorderSide(color: _gridLine, width: 0.4),
@@ -549,7 +570,12 @@ class ShiftMatrixPdfService {
           ),
         pw.Container(
           decoration: pw.BoxDecoration(
-            color: _holidayGray,
+            // NOTE: no longer a solid _holidayGray fill across the whole
+            // row - each day cell below now colors itself individually
+            // (gray only on an actual holiday column, white otherwise),
+            // matching the on-screen matrix's "合計" footer row instead of
+            // graying out every normal work day too.
+            color: _surface,
             border: pw.Border(
               top: pw.BorderSide(color: _primaryDeep, width: 0.8),
             ),
@@ -557,7 +583,7 @@ class ShiftMatrixPdfService {
           child: pw.Row(
             children: [
               for (int day = 1; day <= daysInMonth; day++)
-                totalDayCell(totalHoursForDay(day)),
+                totalDayCell(totalHoursForDay(day), isHolidayDay(day)),
               pw.Container(
                 width: totalColWidth,
                 height: rowHeight,
