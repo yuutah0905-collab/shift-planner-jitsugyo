@@ -783,7 +783,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                 ],
               ),
             ),
-            if (entry.memo.isNotEmpty) ...[
+            // Memo is admin-only context (see `hasMemo` in _dataCell for
+            // the full rationale) - never shown in the readOnly staff
+            // view, even inside this custom-time detail popup.
+            if (!widget.readOnly && entry.memo.isNotEmpty) ...[
               const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1595,7 +1598,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final hasCustomTime = !isBlank && entry.hasCustomTime;
 
     final isPaidLeave = !isBlank && ShiftCode.isPaidLeave(entry.code);
-    final hasMemo = !isBlank && entry.memo.isNotEmpty;
+    // Memos are notes the part-time staff member wrote for the ADMIN only
+    // (e.g. personal circumstances, explanations for an odd shift) - once
+    // a shift is published/distributed, every other staff member on the
+    // team can open this same readOnly matrix, so a memo must never be
+    // visible there (no green dot, no tap-to-view dialog). Only the
+    // admin's own editing view (readOnly == false) shows memos.
+    final hasMemo = !isBlank && !widget.readOnly && entry.memo.isNotEmpty;
     // Prefer the numeric hour value ("4.25") over the internal A~Y letter
     // code for display, matching the paper/Excel shift table the company
     // uses (see the reference image) - the letter codes are just an
