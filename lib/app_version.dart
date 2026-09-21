@@ -35,11 +35,22 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '2.3';
+  static const String currentVersion = '2.4';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '2.4',
+      date: '2026-09-18',
+      notes: [
+        'パートさんに配布するシフト表では、メモが表示されなくなりました（メモは管理者の画面のみで確認できます）',
+        'パートさんに配布するシフト表では、「任意の時間で入力」した日も他の日と同じ白い表示になりました（黄色い表示は管理者の画面のみです）',
+        '「シフト確認」ボタンを追加しました。過去に配布されたシフトを、月を選んでいつでも確認できるようになりました',
+        '（対象月が新しい月に切り替わると、確定バナーは自動で消えますが、過去のシフトは「シフト確認」からいつでも見られます）',
+        '月間シフト一覧表の「合計」行を、PDF出力した時も画面表示と同じ色にしました',
+      ],
+    ),
     UpdateEntry(
       version: '2.3',
       date: '2026-09-17',
