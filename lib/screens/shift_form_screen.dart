@@ -204,7 +204,9 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     if (justPublished) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('シフトが配布されました。下の「月間シフト一覧表を見る」から確認できます。'),
+          content: Text(
+            '${_fmtMonthJp(config.targetMonth)}のシフトが配布されました。下の「月間シフト一覧表を見る」から確認できます。',
+          ),
           backgroundColor: AppColors.success,
           duration: const Duration(seconds: 4),
         ),
@@ -698,13 +700,28 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
 
   /// Opens the admin-published monthly shift matrix in read-only mode, so
   /// part-time staff can see their OWN department's confirmed shift for
-  /// the target month. Publishing is per-department (each department has
-  /// its own admin/manager), so this fetches the full submission list for
-  /// the month, then narrows both the submissions AND the department-tab
-  /// list down to just [_selectedDepartment] - staff cannot switch tabs
-  /// to view other departments' shift matrices. There's a brief loading
-  /// spinner while the fetch request is in flight.
+  /// the CURRENT target month (used by the persistent "シフトが確定しま
+  /// した" banner). Just delegates to [_openMonthlyMatrixFor] with
+  /// today's target month - see that method for the shared implementation
+  /// (also used by the "シフト確認" past-months list for any month).
   Future<void> _openMonthlyMatrix() async {
+    if (_config == null) return;
+    await _openMonthlyMatrixFor(_config!.targetMonth);
+  }
+
+  /// Opens the admin-published monthly shift matrix in read-only mode for
+  /// an ARBITRARY [targetMonth] (not necessarily the current one) - the
+  /// shared implementation behind both the persistent current-month
+  /// banner ([_openMonthlyMatrix]) and the "シフト確認" past-months list
+  /// ([_openPublishedMonthsList]), so staff can look up any previously
+  /// published month, not just the current one. Publishing is
+  /// per-department (each department has its own admin/manager), so this
+  /// fetches the full submission list for the month, then narrows both
+  /// the submissions AND the department-tab list down to just
+  /// [_selectedDepartment] - staff cannot switch tabs to view other
+  /// departments' shift matrices. There's a brief loading spinner while
+  /// the fetch request is in flight.
+  Future<void> _openMonthlyMatrixFor(String targetMonth) async {
     if (_config == null) return;
     final dept = _selectedDepartment;
     if (dept == null || dept.isEmpty) return;
@@ -716,7 +733,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
     );
     try {
       final allSubmissions = await _firestoreService.fetchSubmissionsForMonth(
-        _config!.targetMonth,
+        targetMonth,
       );
       final submissions = allSubmissions
           .where((s) => s.department == dept)
@@ -727,7 +744,7 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
         MaterialPageRoute(
           builder: (_) => MonthlyShiftMatrixScreen(
             submissions: submissions,
-            targetMonth: _config!.targetMonth,
+            targetMonth: targetMonth,
             availableDepartments: [dept],
             initialDepartment: dept,
             employees: _config!.employees,
@@ -740,6 +757,89 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
       Navigator.of(context).pop(); // close loading dialog
       _showSnack('一覧表の取得に失敗しました');
     }
+  }
+
+  /// "シフト確認" button handler: shows every month ever published for
+  /// the current department (newest first, e.g. "2026年11月シフト"), so
+  /// staff can look up a past confirmed shift even after the admin has
+  /// moved the target month forward and the persistent current-month
+  /// banner (see [_openMonthlyMatrix]) has naturally disappeared. Tapping
+  /// a month in the list opens that month's read-only matrix via
+  /// [_openMonthlyMatrixFor].
+  void _openPublishedMonthsList() {
+    final dept = _selectedDepartment;
+    final config = _config;
+    if (dept == null || dept.isEmpty || config == null) return;
+    final months = config.publishedMonthsFor(dept);
+    if (months.isEmpty) {
+      _showSnack('まだ配布されたシフトがありません');
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.fact_check_outlined,
+                    color: AppColors.primaryDeep,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'シフト確認',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                '配布された月を選ぶと、確定したシフト一覧表を確認できます。',
+                style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: months.length,
+                itemBuilder: (context, index) {
+                  final month = months[index];
+                  return ListTile(
+                    leading: const Icon(
+                      Icons.table_chart_outlined,
+                      color: AppColors.success,
+                    ),
+                    title: Text('${_fmtMonthJp(month)}シフト'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _openMonthlyMatrixFor(month);
+                    },
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSuccessDialog() {
@@ -904,6 +1004,16 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
           ],
         ),
         actions: [
+          // Always-available entry point to every past confirmed/published
+          // shift (not just the current target month) - see
+          // [_openPublishedMonthsList]. Only shown once a department is
+          // selected, since publish history is scoped per-department.
+          if (_selectedDepartment != null && _selectedDepartment!.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.fact_check_outlined),
+              tooltip: 'シフト確認',
+              onPressed: _openPublishedMonthsList,
+            ),
           IconButton(
             icon: const Icon(Icons.help_outline),
             tooltip: '使い方ガイド',
@@ -966,10 +1076,10 @@ class _ShiftFormScreenState extends State<ShiftFormScreen> {
                                       color: AppColors.success,
                                     ),
                                     const SizedBox(width: 10),
-                                    const Expanded(
+                                    Expanded(
                                       child: Text(
-                                        'シフトが確定しました。月間シフト一覧表を見る',
-                                        style: TextStyle(
+                                        '${_fmtMonthJp(config.targetMonth)}のシフトが確定しました。月間シフト一覧表を見る',
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: AppColors.success,
                                         ),

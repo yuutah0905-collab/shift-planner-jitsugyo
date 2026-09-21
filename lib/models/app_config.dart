@@ -12,15 +12,22 @@ class AppConfig {
   // who has NOT yet submitted their shift request for the target month.
   // Optional feature: if empty, the "未提出者" admin section is hidden.
   final List<Employee> employees;
-  // Per-department "シフト配布" (publish) state: department name -> the
-  // "YYYY-MM" target month whose completed monthly shift matrix the
-  // admin has published for that department's part-time staff to view
-  // from their own shift-request screen. A department not present in
-  // this map (or whose value != the current `targetMonth`) is treated
-  // as not published. Kept per-department (rather than one app-wide
-  // flag) because each department has its own admin/manager who
-  // publishes independently of the others.
-  final Map<String, String> publishedDepartments;
+  // Per-department "シフト配布" (publish) history: department name -> the
+  // list of "YYYY-MM" target months whose completed monthly shift matrix
+  // the admin has published for that department's part-time staff to
+  // view from their own shift-request screen. Unlike a single "currently
+  // published month" flag, this is a HISTORY - once a month is published
+  // it stays in the list (so staff can always look it up later via the
+  // "シフト確認" button), even after the admin advances `targetMonth` to
+  // a new month. The persistent on-screen banner (which announces the
+  // CURRENT month's shift as newly confirmed) still only shows for the
+  // one month that equals `targetMonth` - see [isDepartmentPublished] -
+  // it naturally disappears once the admin moves on to the next month,
+  // even though that past month's entry is never removed from this list.
+  // Kept per-department (rather than one app-wide list) because each
+  // department has its own admin/manager who publishes independently of
+  // the others.
+  final Map<String, List<String>> publishedDepartments;
 
   AppConfig({
     required this.targetMonth,
@@ -47,11 +54,33 @@ class AppConfig {
     employees: (map['employees'] as List<dynamic>? ?? [])
         .map((e) => Employee.fromMap(Map<String, dynamic>.from(e as Map)))
         .toList(),
-    publishedDepartments:
-        (map['publishedDepartments'] as Map<dynamic, dynamic>? ?? {}).map(
-          (k, v) => MapEntry(k.toString(), v.toString()),
-        ),
+    publishedDepartments: _parsePublishedDepartments(
+      map['publishedDepartments'],
+    ),
   );
+
+  /// Parses the `publishedDepartments` field, supporting BOTH the current
+  /// shape (department -> list of "YYYY-MM" months) and the OLD shape
+  /// from before the "past published shifts" history feature (department
+  /// -> a single "YYYY-MM" string) - so existing Firestore data written
+  /// by an older app version doesn't get silently dropped/crash on load.
+  /// A single old-style string value is simply wrapped into a one-element
+  /// list.
+  static Map<String, List<String>> _parsePublishedDepartments(dynamic raw) {
+    if (raw is! Map) return {};
+    final result = <String, List<String>>{};
+    raw.forEach((k, v) {
+      final key = k.toString();
+      if (v is List) {
+        result[key] = v.map((e) => e.toString()).toList();
+      } else if (v != null) {
+        // Old shape: a single "YYYY-MM" string.
+        final month = v.toString();
+        if (month.isNotEmpty) result[key] = [month];
+      }
+    });
+    return result;
+  }
 
   AppConfig copyWith({
     String? targetMonth,
@@ -61,7 +90,7 @@ class AppConfig {
     List<String>? departments,
     String? adminPassword,
     List<Employee>? employees,
-    Map<String, String>? publishedDepartments,
+    Map<String, List<String>>? publishedDepartments,
   }) {
     return AppConfig(
       targetMonth: targetMonth ?? this.targetMonth,
@@ -76,11 +105,26 @@ class AppConfig {
   }
 
   /// True if [department] currently has its monthly shift matrix
-  /// published for THIS config's `targetMonth` (i.e. still current, not
-  /// a stale publish left over from a previous target month).
+  /// published for THIS config's `targetMonth` (i.e. the CURRENT month
+  /// is in that department's publish history) - used to show the
+  /// persistent "〇〇月のシフトが確定しました" banner. This intentionally
+  /// does NOT reflect past months still sitting in the publish history -
+  /// those are only reachable via the "シフト確認" button/screen (see
+  /// [publishedMonthsFor]), so the banner naturally disappears once the
+  /// admin advances to a new target month even though the previous
+  /// month's entry is kept for history.
   bool isDepartmentPublished(String department) =>
-      publishedDepartments[department] == targetMonth &&
-      targetMonth.isNotEmpty;
+      targetMonth.isNotEmpty &&
+      (publishedDepartments[department] ?? const []).contains(targetMonth);
+
+  /// All "YYYY-MM" months ever published for [department], newest first -
+  /// used by the "シフト確認" screen so part-time staff can look up any
+  /// past confirmed shift, not just the current month's.
+  List<String> publishedMonthsFor(String department) {
+    final months = List<String>.from(publishedDepartments[department] ?? const []);
+    months.sort((a, b) => b.compareTo(a)); // "YYYY-MM" sorts lexically = chronologically
+    return months;
+  }
 
   static AppConfig fallback() {
     final now = DateTime.now();

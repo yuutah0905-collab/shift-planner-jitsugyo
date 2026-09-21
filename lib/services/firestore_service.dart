@@ -271,30 +271,46 @@ class FirestoreService {
     }, SetOptions(merge: true));
   }
 
-  /// Toggles the "シフト配布" (publish) flag for a single [department]'s
-  /// monthly shift matrix, used by the admin's monthly shift matrix screen.
-  /// Each department has its own admin/manager, so publishing is scoped
-  /// per-department (not a single app-wide flag): only the map entry for
-  /// [department] is touched via dot-notation `update()`, so other
-  /// departments' publish states and any other config field are never
-  /// clobbered by a concurrent edit on the settings screen.
+  /// Toggles the "シフト配布" (publish) flag for a single [department] +
+  /// [targetMonth], used by the admin's monthly shift matrix screen.
+  /// `publishedDepartments.<department>` is a LIST of "YYYY-MM" months
+  /// (the full publish history for that department, oldest and newest
+  /// kept together) rather than a single value - turning publish ON adds
+  /// [targetMonth] to that list (if not already present), and turning it
+  /// OFF removes just that one month, leaving any other previously
+  /// published months untouched so staff can still look them up via the
+  /// "シフト確認" screen. Each department has its own admin/manager, so
+  /// publishing is scoped per-department: only the map entry for
+  /// [department] is touched, so other departments' publish states and
+  /// any other config field are never clobbered by a concurrent edit on
+  /// the settings screen.
   Future<void> setDepartmentPublished(
     String department,
     bool published,
     String targetMonth,
   ) async {
     final docRef = _db.collection('app_settings').doc('config');
+    // Firestore's arrayUnion/arrayRemove don't work through map-key dot
+    // notation reliably across all SDKs for a nested map-of-lists field,
+    // so read-modify-write the whole `publishedDepartments` map instead -
+    // this is a low-frequency admin action (one tap), not a hot path, so
+    // the extra read is not a performance concern.
+    final snapshot = await docRef.get();
+    final current = AppConfig.fromMap(
+      snapshot.data() ?? {},
+    ).publishedDepartments;
+    final updated = Map<String, List<String>>.from(
+      current.map((k, v) => MapEntry(k, List<String>.from(v))),
+    );
+    final months = updated.putIfAbsent(department, () => []);
     if (published) {
-      await docRef.set({
-        'publishedDepartments': {department: targetMonth},
-      }, SetOptions(merge: true));
+      if (!months.contains(targetMonth)) months.add(targetMonth);
     } else {
-      // Dot-notation update() to remove just this one map key without
-      // needing to read the doc first or touching sibling departments.
-      await docRef.update({
-        'publishedDepartments.$department': FieldValue.delete(),
-      });
+      months.remove(targetMonth);
     }
+    await docRef.set({
+      'publishedDepartments': updated,
+    }, SetOptions(merge: true));
   }
 
   /// Doc id for the monthly shift matrix's "備考" (remarks) free-text
