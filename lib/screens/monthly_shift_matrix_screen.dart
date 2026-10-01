@@ -298,13 +298,39 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   Timer? _remarksSaveDebounce;
   bool _remarksLoaded = false;
 
-  // Pinch-to-zoom support for the readOnly (part-time staff's published
+  // Manual zoom-in support for the readOnly (part-time staff's published
   // view) matrix only - the adaptive sizing above shrinks cells/text to
   // fit the whole month on screen, which some staff found hard to read.
-  // Lets them pinch-zoom in to read small text, while the table's own
-  // nested scroll views (name column / header row / body) still handle
-  // panning around once zoomed - see panEnabled: false below.
-  final TransformationController _zoomController = TransformationController();
+  //
+  // IMPORTANT: this is NOT an InteractiveViewer/pinch-gesture zoom. Two
+  // earlier attempts at that approach were both broken in ways that made
+  // the feature worse than not having it at all:
+  //  1. First attempt: zoomed the WHOLE table (including the name column)
+  //     as one image with panning disabled - once zoomed in, there was no
+  //     way to pan back to the name column to see whose row you were
+  //     looking at, so staff could see numbers but not who they belonged
+  //     to.
+  //  2. Second attempt: same "zoom the whole flat table as one image" idea
+  //     but with panning enabled - this still scrolled the name column
+  //     off-screen as soon as you panned right to see later days (exactly
+  //     the same "which row is this?" problem, just reachable via drag
+  //     instead of being stuck immediately), PLUS InteractiveViewer's
+  //     default `constrained: true` quietly capped the pannable area to
+  //     the viewport size, which clipped away everything past ~day 17 of
+  //     the month.
+  // The actual fix is to never let the name column (or the date header
+  // row) move out of view at all: instead of zooming/panning the table as
+  // a flattened image, this just multiplies the existing adaptive
+  // cell/row/font sizes by [_zoomLevel] and lets the table's OWN existing
+  // frozen-pane scroll views (name column pinned left / header row pinned
+  // top / body scrolls both ways, synced via [_syncOffset] - unchanged,
+  // same as the admin view) do the panning, exactly like before zoom was
+  // added. The name column and date header literally cannot scroll out of
+  // their fixed positions, at any zoom level, because they're not part of
+  // what's being panned - only their SIZE changes.
+  double _zoomLevel = 1.0;
+  static const double _zoomStep = 0.25;
+  static const double _maxZoomLevel = 2.5;
 
   static const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -374,16 +400,31 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // very wide window.
     final newFontScale = rawScale.clamp(0.65, 1.3);
 
-    if (_rowHeight != newRowHeight ||
-        _nameColWidth != newNameColWidth ||
-        _totalColWidth != newTotalColWidth ||
-        _dayColWidth != newDayColWidth ||
-        _fontScale != newFontScale) {
-      _rowHeight = newRowHeight;
-      _nameColWidth = newNameColWidth;
-      _totalColWidth = newTotalColWidth;
-      _dayColWidth = newDayColWidth;
-      _fontScale = newFontScale;
+    // Manual zoom-in (readOnly/staff view only, see [_zoomLevel]) simply
+    // multiplies the auto-fit sizes computed above by the current zoom
+    // level, AFTER the normal "fit the whole month on screen" computation
+    // - so zooming in always starts from the same baseline the admin view
+    // uses, then enlarges every dimension together (cell width/height
+    // AND font) while the table's existing frozen-pane scroll views (not
+    // touched here) do the panning. Not applied in admin (editable) mode,
+    // where [_zoomLevel] always stays 1.0 anyway.
+    final zoom = widget.readOnly ? _zoomLevel : 1.0;
+    final zoomedRowHeight = newRowHeight * zoom;
+    final zoomedNameColWidth = newNameColWidth * zoom;
+    final zoomedTotalColWidth = newTotalColWidth * zoom;
+    final zoomedDayColWidth = newDayColWidth * zoom;
+    final zoomedFontScale = newFontScale * zoom;
+
+    if (_rowHeight != zoomedRowHeight ||
+        _nameColWidth != zoomedNameColWidth ||
+        _totalColWidth != zoomedTotalColWidth ||
+        _dayColWidth != zoomedDayColWidth ||
+        _fontScale != zoomedFontScale) {
+      _rowHeight = zoomedRowHeight;
+      _nameColWidth = zoomedNameColWidth;
+      _totalColWidth = zoomedTotalColWidth;
+      _dayColWidth = zoomedDayColWidth;
+      _fontScale = zoomedFontScale;
     }
   }
 
@@ -566,16 +607,26 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     _bodyHController.dispose();
     _remarksSaveDebounce?.cancel();
     _remarksController.dispose();
-    _zoomController.dispose();
     super.dispose();
   }
 
-  /// Resets the pinch-zoom level back to 1:1, shown as a small floating
-  /// button only once the staff member has actually zoomed in (readOnly
-  /// mode only - see [_zoomController]).
-  void _resetZoom() {
-    _zoomController.value = Matrix4.identity();
-    setState(() {});
+  /// Increases [_zoomLevel] by one step, up to [_maxZoomLevel]. Enlarges
+  /// every cell/row/font size (see [_computeAdaptiveSizes]) without
+  /// moving the name column or date header out of their fixed positions
+  /// - see the long comment on [_zoomLevel] for why this replaced an
+  /// earlier pinch-to-zoom InteractiveViewer approach.
+  void _zoomIn() {
+    setState(() {
+      _zoomLevel = (_zoomLevel + _zoomStep).clamp(1.0, _maxZoomLevel);
+    });
+  }
+
+  /// Decreases [_zoomLevel] by one step, down to 1.0 (the normal
+  /// auto-fit size).
+  void _zoomOut() {
+    setState(() {
+      _zoomLevel = (_zoomLevel - _zoomStep).clamp(1.0, _maxZoomLevel);
+    });
   }
 
   void _buildRosterOrder() {
@@ -1103,7 +1154,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   Expanded(
                     child: Text(
                       widget.readOnly
-                          ? '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ ピンチ操作で拡大できます ・ 最下部の「合計」行はその日の全員の合計時間'
+                          ? '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ 右下の「＋」で拡大できます ・ 最下部の「合計」行はその日の全員の合計時間'
                           : '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップで時間を修正 ・ 最下部の「合計」行はその日の全員の合計時間',
                       style: const TextStyle(
                         fontSize: 11,
@@ -1240,265 +1291,56 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     );
   }
 
-  /// Wraps the matrix with pinch-to-zoom + free panning (readOnly/staff
+  /// Wraps the matrix with a manual zoom-in/out control (readOnly/staff
   /// view only) so part-time staff who find the auto-shrunk cells/text
-  /// hard to read can pinch in for a closer look, then drag a finger
-  /// around - INCLUDING back to the name column - to read any part of the
-  /// zoomed-in table.
-  ///
-  /// NOTE on an earlier, broken version of this: `panEnabled: false` was
-  /// tried first (reasoning: the frozen-pane table already has its own
-  /// internal scroll views for panning, see [_buildMatrix]/[_syncOffset],
-  /// so letting InteractiveViewer ALSO pan seemed like it would conflict).
-  /// In practice that was wrong and made the feature unusable: once
-  /// zoomed in, there was no way to drag back to the left to see the name
-  /// column again - panEnabled:false only allows re-centering by pinching
-  /// back out, which is fiddly and doesn't let you look around while
-  /// staying zoomed in. The fix is this: readOnly mode uses a completely
-  /// flat, non-self-scrolling table layout ([_buildFlatMatrix] - name
-  /// column included, no frozen pane, no inner scroll views at all) as
-  /// InteractiveViewer's child, with BOTH `panEnabled` and `scaleEnabled`
-  /// true. InteractiveViewer then becomes the ONLY way to move around the
-  /// table (pan with one finger, zoom with two), with nothing internal to
-  /// fight it - so dragging back to the name column always works, at any
-  /// zoom level.
+  /// hard to read can enlarge them, then use the table's OWN existing
+  /// frozen-pane scroll views (name column pinned left / header row
+  /// pinned top, see [_buildMatrix]) to pan around - exactly like the
+  /// admin view, just with bigger cells/text. See the long comment on
+  /// [_zoomLevel] for the two earlier (broken) pinch-to-zoom attempts
+  /// this replaced, and why: both of them let the name column scroll out
+  /// of view while zoomed in, so staff could see shift numbers but not
+  /// whose row they were looking at. This approach makes that impossible
+  /// by construction - the name column/header never leave their fixed
+  /// position at any zoom level, since only their SIZE (not their
+  /// position in the layout) changes.
   Widget _buildMatrixArea(List<_PersonRow> rows) {
-    if (!widget.readOnly) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          _computeAdaptiveSizes(constraints, rows.length);
-          return _buildMatrix(rows);
-        },
-      );
-    }
+    final table = LayoutBuilder(
+      builder: (context, constraints) {
+        _computeAdaptiveSizes(constraints, rows.length);
+        return _buildMatrix(rows);
+      },
+    );
+    if (!widget.readOnly) return table;
     return Stack(
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            _computeAdaptiveSizes(constraints, rows.length);
-            return InteractiveViewer(
-              transformationController: _zoomController,
-              // `constrained: false` is essential here: InteractiveViewer's
-              // default (`constrained: true`) forces its child to be
-              // exactly the VIEWPORT's size (via a tight BoxConstraints),
-              // which silently overrides the flat matrix's own intrinsic
-              // width/height (tableWidth/tableHeight in
-              // [_buildFlatMatrix]) and clips away everything beyond the
-              // viewport's edge - this was the bug where only the first
-              // ~17 days were visible/reachable no matter how far the
-              // table was panned, since the rest of the days literally
-              // didn't exist inside the forced-down child size. With
-              // `constrained: false`, the child keeps its real, full
-              // size (the whole month) and InteractiveViewer just pans
-              // the viewport around within it.
-              constrained: false,
-              panEnabled: true,
-              scaleEnabled: true,
-              minScale: 1.0,
-              maxScale: 4.0,
-              boundaryMargin: const EdgeInsets.all(40),
-              onInteractionEnd: (_) => setState(() {}),
-              // RepaintBoundary caches the (fairly complex, many-celled)
-              // flat matrix as its own compositor layer, so panning/
-              // zooming only has to transform that cached layer on the
-              // GPU instead of re-painting every cell's Container/border/
-              // text each frame - without this, the large table visibly
-              // stutters ("カクカクする") while pinching/dragging.
-              child: RepaintBoundary(child: _buildFlatMatrix(rows)),
-            );
-          },
-        ),
-        if (_zoomController.value != Matrix4.identity())
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: FloatingActionButton.small(
-              heroTag: null,
-              onPressed: _resetZoom,
-              tooltip: '拡大を元に戻す',
-              backgroundColor: AppColors.primary,
-              child: const Icon(Icons.zoom_out_map, color: Colors.white),
-            ),
+        table,
+        Positioned(
+          right: 12,
+          bottom: 12,
+          child: Column(
+            children: [
+              FloatingActionButton.small(
+                heroTag: null,
+                onPressed: _zoomLevel < _maxZoomLevel ? _zoomIn : null,
+                tooltip: '拡大する',
+                backgroundColor: AppColors.primary,
+                child: const Icon(Icons.add, color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              FloatingActionButton.small(
+                heroTag: null,
+                onPressed: _zoomLevel > 1.0 ? _zoomOut : null,
+                tooltip: '縮小する',
+                backgroundColor: _zoomLevel > 1.0
+                    ? AppColors.primary
+                    : AppColors.inkMute,
+                child: const Icon(Icons.remove, color: Colors.white),
+              ),
+            ],
           ),
+        ),
       ],
-    );
-  }
-
-  /// Flat (non-self-scrolling) rendering of the whole matrix - name
-  /// column, header row, every data row, and the "合計" footer row - all
-  /// laid out as one fixed-size widget tree with no internal
-  /// `SingleChildScrollView`s of its own. Used ONLY as the child of the
-  /// pinch-zoom/pan `InteractiveViewer` in [_buildMatrixArea] (readOnly
-  /// staff view): since InteractiveViewer provides ALL of the
-  /// panning/zooming itself, the content it wraps must be a plain,
-  /// statically-sized widget - any scrolling inside it would otherwise
-  /// compete with InteractiveViewer's own drag gesture instead of letting
-  /// a single finger-drag move around the zoomed table predictably in
-  /// every direction (including back to the name column). Reuses the
-  /// same per-cell builder methods as [_buildMatrix] ([_headerDayCell],
-  /// [_headerTotalCell], [_dataCell], [_totalDayCell]) so both views stay
-  /// visually identical.
-  Widget _buildFlatMatrix(List<_PersonRow> rows) {
-    final tableWidth =
-        _nameColWidth + _dayColWidth * _daysInMonth + _totalColWidth * 2;
-    final tableHeight = _rowHeight * (rows.length + 2);
-
-    Widget nameHeaderCell() => Container(
-      width: _nameColWidth,
-      height: _rowHeight,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: const BoxDecoration(
-        border: Border(
-          left: BorderSide(color: AppColors.gridLine, width: 0.6),
-          right: BorderSide(color: AppColors.gridLine, width: 0.6),
-        ),
-      ),
-      child: Text(
-        '氏名',
-        style: TextStyle(
-          color: AppColors.ink,
-          fontWeight: FontWeight.bold,
-          fontSize: 12 * _fontScale,
-        ),
-      ),
-    );
-
-    Widget nameCell(String name, bool isEven) => Container(
-      width: _nameColWidth,
-      height: _rowHeight,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: BoxDecoration(
-        color: isEven ? AppColors.surface : AppColors.background,
-        border: Border.all(color: AppColors.gridLine, width: 0.6),
-      ),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Text(
-          name,
-          maxLines: 1,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 12 * _fontScale,
-          ),
-        ),
-      ),
-    );
-
-    Widget nameTotalLabelCell() => Container(
-      width: _nameColWidth,
-      height: _rowHeight,
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          left: BorderSide(color: AppColors.gridLine, width: 0.6),
-          right: BorderSide(color: AppColors.gridLine, width: 0.6),
-        ),
-      ),
-      child: Text(
-        '合計',
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: 12 * _fontScale,
-          color: AppColors.ink,
-        ),
-      ),
-    );
-
-    Widget rowTotalCell(String text, {double fontSize = 12}) => Container(
-      width: _totalColWidth,
-      height: _rowHeight,
-      alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        border: Border(
-          left: BorderSide(color: AppColors.gridLine, width: 0.6),
-        ),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontWeight: FontWeight.bold,
-          fontSize: fontSize * _fontScale,
-          color: AppColors.ink,
-        ),
-      ),
-    );
-
-    return SizedBox(
-      width: tableWidth,
-      height: tableHeight,
-      child: Column(
-        children: [
-          // Header row: name corner + each day + the two total headers.
-          Container(
-            decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: AppColors.gridLine, width: 0.6),
-                bottom: BorderSide(color: AppColors.primaryDeep, width: 1.4),
-              ),
-            ),
-            child: Row(
-              children: [
-                nameHeaderCell(),
-                for (int day = 1; day <= _daysInMonth; day++)
-                  _headerDayCell(day),
-                _headerTotalCell('出勤日数'),
-                _headerTotalCell('時間(h)'),
-              ],
-            ),
-          ),
-          // One row per person.
-          for (int i = 0; i < rows.length; i++)
-            Container(
-              decoration: BoxDecoration(
-                color: i.isEven ? AppColors.surface : AppColors.background,
-                border: const Border(
-                  bottom: BorderSide(color: AppColors.gridLine, width: 0.6),
-                ),
-              ),
-              child: Row(
-                children: [
-                  nameCell(rows[i].name, i.isEven),
-                  for (int day = 1; day <= _daysInMonth; day++)
-                    _dataCell(rows[i], day),
-                  rowTotalCell('${rows[i].filledDaysCount}'),
-                  rowTotalCell(
-                    rows[i].totalHours.toStringAsFixed(2),
-                    fontSize: 11,
-                  ),
-                ],
-              ),
-            ),
-          // "合計" footer row.
-          Container(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(
-                top: BorderSide(color: AppColors.primaryDeep, width: 1.4),
-              ),
-            ),
-            child: Row(
-              children: [
-                nameTotalLabelCell(),
-                for (int day = 1; day <= _daysInMonth; day++)
-                  _totalDayCell(
-                    _totalHoursForDay(rows, day),
-                    _isHolidayDay(rows, day),
-                  ),
-                SizedBox(width: _totalColWidth, height: _rowHeight),
-                rowTotalCell(
-                  _grandTotalHours(rows).toStringAsFixed(2),
-                  fontSize: 11,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
