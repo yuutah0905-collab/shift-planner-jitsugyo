@@ -1240,15 +1240,28 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     );
   }
 
-  /// Wraps [_buildMatrix] with pinch-to-zoom (readOnly/staff view only) so
-  /// part-time staff who find the auto-shrunk cells/text hard to read can
-  /// pinch in for a closer look. `panEnabled: false` is deliberate: the
-  /// table already has its own frozen-pane scroll views (name column /
-  /// header row / body, kept in sync via [_syncOffset]) for panning around
-  /// - letting InteractiveViewer ALSO pan would fight with those and break
-  /// the frozen-pane behavior. Only `scaleEnabled` (pinch) is used here; a
-  /// small "縮小に戻す" button appears once zoomed in, since a two-finger
-  /// pinch-back-out gesture is fiddly to land exactly on 1.0x.
+  /// Wraps the matrix with pinch-to-zoom + free panning (readOnly/staff
+  /// view only) so part-time staff who find the auto-shrunk cells/text
+  /// hard to read can pinch in for a closer look, then drag a finger
+  /// around - INCLUDING back to the name column - to read any part of the
+  /// zoomed-in table.
+  ///
+  /// NOTE on an earlier, broken version of this: `panEnabled: false` was
+  /// tried first (reasoning: the frozen-pane table already has its own
+  /// internal scroll views for panning, see [_buildMatrix]/[_syncOffset],
+  /// so letting InteractiveViewer ALSO pan seemed like it would conflict).
+  /// In practice that was wrong and made the feature unusable: once
+  /// zoomed in, there was no way to drag back to the left to see the name
+  /// column again - panEnabled:false only allows re-centering by pinching
+  /// back out, which is fiddly and doesn't let you look around while
+  /// staying zoomed in. The fix is this: readOnly mode uses a completely
+  /// flat, non-self-scrolling table layout ([_buildFlatMatrix] - name
+  /// column included, no frozen pane, no inner scroll views at all) as
+  /// InteractiveViewer's child, with BOTH `panEnabled` and `scaleEnabled`
+  /// true. InteractiveViewer then becomes the ONLY way to move around the
+  /// table (pan with one finger, zoom with two), with nothing internal to
+  /// fight it - so dragging back to the name column always works, at any
+  /// zoom level.
   Widget _buildMatrixArea(List<_PersonRow> rows) {
     if (!widget.readOnly) {
       return LayoutBuilder(
@@ -1265,12 +1278,13 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             _computeAdaptiveSizes(constraints, rows.length);
             return InteractiveViewer(
               transformationController: _zoomController,
-              panEnabled: false,
+              panEnabled: true,
               scaleEnabled: true,
               minScale: 1.0,
-              maxScale: 3.0,
+              maxScale: 4.0,
+              boundaryMargin: const EdgeInsets.all(40),
               onInteractionEnd: (_) => setState(() {}),
-              child: _buildMatrix(rows),
+              child: _buildFlatMatrix(rows),
             );
           },
         ),
@@ -1287,6 +1301,184 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             ),
           ),
       ],
+    );
+  }
+
+  /// Flat (non-self-scrolling) rendering of the whole matrix - name
+  /// column, header row, every data row, and the "合計" footer row - all
+  /// laid out as one fixed-size widget tree with no internal
+  /// `SingleChildScrollView`s of its own. Used ONLY as the child of the
+  /// pinch-zoom/pan `InteractiveViewer` in [_buildMatrixArea] (readOnly
+  /// staff view): since InteractiveViewer provides ALL of the
+  /// panning/zooming itself, the content it wraps must be a plain,
+  /// statically-sized widget - any scrolling inside it would otherwise
+  /// compete with InteractiveViewer's own drag gesture instead of letting
+  /// a single finger-drag move around the zoomed table predictably in
+  /// every direction (including back to the name column). Reuses the
+  /// same per-cell builder methods as [_buildMatrix] ([_headerDayCell],
+  /// [_headerTotalCell], [_dataCell], [_totalDayCell]) so both views stay
+  /// visually identical.
+  Widget _buildFlatMatrix(List<_PersonRow> rows) {
+    final tableWidth =
+        _nameColWidth + _dayColWidth * _daysInMonth + _totalColWidth * 2;
+    final tableHeight = _rowHeight * (rows.length + 2);
+
+    Widget nameHeaderCell() => Container(
+      width: _nameColWidth,
+      height: _rowHeight,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: const BoxDecoration(
+        border: Border(
+          left: BorderSide(color: AppColors.gridLine, width: 0.6),
+          right: BorderSide(color: AppColors.gridLine, width: 0.6),
+        ),
+      ),
+      child: Text(
+        '氏名',
+        style: TextStyle(
+          color: AppColors.ink,
+          fontWeight: FontWeight.bold,
+          fontSize: 12 * _fontScale,
+        ),
+      ),
+    );
+
+    Widget nameCell(String name, bool isEven) => Container(
+      width: _nameColWidth,
+      height: _rowHeight,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: isEven ? AppColors.surface : AppColors.background,
+        border: Border.all(color: AppColors.gridLine, width: 0.6),
+      ),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Text(
+          name,
+          maxLines: 1,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            fontSize: 12 * _fontScale,
+          ),
+        ),
+      ),
+    );
+
+    Widget nameTotalLabelCell() => Container(
+      width: _nameColWidth,
+      height: _rowHeight,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          left: BorderSide(color: AppColors.gridLine, width: 0.6),
+          right: BorderSide(color: AppColors.gridLine, width: 0.6),
+        ),
+      ),
+      child: Text(
+        '合計',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12 * _fontScale,
+          color: AppColors.ink,
+        ),
+      ),
+    );
+
+    Widget rowTotalCell(String text, {double fontSize = 12}) => Container(
+      width: _totalColWidth,
+      height: _rowHeight,
+      alignment: Alignment.center,
+      decoration: const BoxDecoration(
+        border: Border(
+          left: BorderSide(color: AppColors.gridLine, width: 0.6),
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: fontSize * _fontScale,
+          color: AppColors.ink,
+        ),
+      ),
+    );
+
+    return SizedBox(
+      width: tableWidth,
+      height: tableHeight,
+      child: Column(
+        children: [
+          // Header row: name corner + each day + the two total headers.
+          Container(
+            decoration: const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.gridLine, width: 0.6),
+                bottom: BorderSide(color: AppColors.primaryDeep, width: 1.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                nameHeaderCell(),
+                for (int day = 1; day <= _daysInMonth; day++)
+                  _headerDayCell(day),
+                _headerTotalCell('出勤日数'),
+                _headerTotalCell('時間(h)'),
+              ],
+            ),
+          ),
+          // One row per person.
+          for (int i = 0; i < rows.length; i++)
+            Container(
+              decoration: BoxDecoration(
+                color: i.isEven ? AppColors.surface : AppColors.background,
+                border: const Border(
+                  bottom: BorderSide(color: AppColors.gridLine, width: 0.6),
+                ),
+              ),
+              child: Row(
+                children: [
+                  nameCell(rows[i].name, i.isEven),
+                  for (int day = 1; day <= _daysInMonth; day++)
+                    _dataCell(rows[i], day),
+                  rowTotalCell('${rows[i].filledDaysCount}'),
+                  rowTotalCell(
+                    rows[i].totalHours.toStringAsFixed(2),
+                    fontSize: 11,
+                  ),
+                ],
+              ),
+            ),
+          // "合計" footer row.
+          Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(
+                top: BorderSide(color: AppColors.primaryDeep, width: 1.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                nameTotalLabelCell(),
+                for (int day = 1; day <= _daysInMonth; day++)
+                  _totalDayCell(
+                    _totalHoursForDay(rows, day),
+                    _isHolidayDay(rows, day),
+                  ),
+                SizedBox(width: _totalColWidth, height: _rowHeight),
+                rowTotalCell(
+                  _grandTotalHours(rows).toStringAsFixed(2),
+                  fontSize: 11,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
