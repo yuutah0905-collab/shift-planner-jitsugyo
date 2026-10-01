@@ -35,7 +35,11 @@ class _HourEditResult {
   final bool paidLeave;
   final double? hours;
 
-  const _HourEditResult({this.clear = false, this.paidLeave = false, this.hours});
+  const _HourEditResult({
+    this.clear = false,
+    this.paidLeave = false,
+    this.hours,
+  });
 }
 
 /// Bottom sheet used by the monthly shift matrix's tap-to-edit-hours
@@ -92,9 +96,9 @@ class _HourEditSheetState extends State<_HourEditSheet> {
     }
     final h = double.tryParse(text);
     if (h == null || h < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('時間を正しく入力してください（例：3.5）')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('時間を正しく入力してください（例：3.5）')));
       return;
     }
     Navigator.of(context).pop(_HourEditResult(hours: h));
@@ -189,9 +193,8 @@ class _HourEditSheetState extends State<_HourEditSheet> {
             child: OutlinedButton.icon(
               icon: const Icon(Icons.clear),
               label: const Text('クリア（休みにする）'),
-              onPressed: () => Navigator.of(
-                context,
-              ).pop(const _HourEditResult(clear: true)),
+              onPressed: () =>
+                  Navigator.of(context).pop(const _HourEditResult(clear: true)),
             ),
           ),
           const SizedBox(height: 8),
@@ -342,7 +345,10 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // the table always exactly fills the available width with zero blank
     // space, on any screen size. Only a floor is kept, so cells never
     // shrink below a tappable/readable size on narrow phones.
-    final newDayColWidth = (remaining / _daysInMonth).clamp(20.0, double.infinity);
+    final newDayColWidth = (remaining / _daysInMonth).clamp(
+      20.0,
+      double.infinity,
+    );
 
     // +2 = the fixed header row + the "合計" footer row.
     final totalRowSlots = rowCount + 2;
@@ -428,7 +434,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             if (!mounted) return;
             setState(() {
               _submissions = all
-                  .where((s) => widget.availableDepartments.contains(s.department))
+                  .where(
+                    (s) => widget.availableDepartments.contains(s.department),
+                  )
                   .toList();
             });
           });
@@ -724,8 +732,12 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // the cell itself, which already skips the yellow fill in readOnly
     // mode (see `cellColor` in `_dataCell`).
     final accentColor = widget.readOnly ? AppColors.ink : AppColors.customTime;
-    final accentBg = widget.readOnly ? AppColors.surface : AppColors.customTimeBg;
-    final accentBorder = widget.readOnly ? AppColors.line : AppColors.customTime.withValues(alpha: 0.4);
+    final accentBg = widget.readOnly
+        ? AppColors.surface
+        : AppColors.customTimeBg;
+    final accentBorder = widget.readOnly
+        ? AppColors.line
+        : AppColors.customTime.withValues(alpha: 0.4);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -865,11 +877,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     // sheet has something to edit; it's inserted into the submission's
     // `days` list only if the admin actually saves a value.
     final isNewEntry = entry == null;
-    entry ??= DayEntry(
-      date: key,
-      dayOfWeek: _dowJp[dow],
-      isHoliday: isWeekend,
-    );
+    entry ??= DayEntry(date: key, dayOfWeek: _dowJp[dow], isHoliday: isWeekend);
 
     final result = await showModalBottomSheet<_HourEditResult>(
       context: context,
@@ -933,14 +941,12 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       await _firestoreService.updateSubmission(updated);
       if (!mounted) return;
       setState(() {
-        final idx = _submissions.indexWhere(
-          (s) => s.id == row.submission.id,
-        );
+        final idx = _submissions.indexWhere((s) => s.id == row.submission.id);
         if (idx != -1) _submissions[idx] = updated;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('時間を修正しました')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('時間を修正しました')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -983,9 +989,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF出力に失敗しました: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF出力に失敗しました: $e')));
     } finally {
       if (mounted) setState(() => _isExportingPdf = false);
     }
@@ -1007,9 +1013,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   // Keep this button compact: on narrow phone screens the
@@ -1052,9 +1056,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white,
-                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
                   : const Icon(Icons.picture_as_pdf_outlined),
@@ -1377,9 +1379,18 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         decoration: const BoxDecoration(
                           color: AppColors.surface,
                           border: Border(
-                            left: BorderSide(color: AppColors.gridLine, width: 0.6),
-                            right: BorderSide(color: AppColors.gridLine, width: 0.6),
-                            bottom: BorderSide(color: AppColors.gridLine, width: 0.6),
+                            left: BorderSide(
+                              color: AppColors.gridLine,
+                              width: 0.6,
+                            ),
+                            right: BorderSide(
+                              color: AppColors.gridLine,
+                              width: 0.6,
+                            ),
+                            bottom: BorderSide(
+                              color: AppColors.gridLine,
+                              width: 0.6,
+                            ),
                             top: BorderSide(
                               color: AppColors.primaryDeep,
                               width: 1.4,
@@ -1543,7 +1554,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             width: _totalColWidth,
             alignment: Alignment.center,
             decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: AppColors.gridLine, width: 0.6)),
+              border: Border(
+                left: BorderSide(color: AppColors.gridLine, width: 0.6),
+              ),
             ),
             child: Text(
               '${row.filledDaysCount}',
@@ -1594,7 +1607,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             width: _totalColWidth,
             alignment: Alignment.center,
             decoration: const BoxDecoration(
-              border: Border(left: BorderSide(color: AppColors.gridLine, width: 0.6)),
+              border: Border(
+                left: BorderSide(color: AppColors.gridLine, width: 0.6),
+              ),
             ),
             // The grand-total attendance-day count in this corner cell is
             // not needed - left blank on purpose (per-employee counts in
@@ -1660,7 +1675,8 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final isWeekend = dow == 0 || dow == 6;
 
     final isHolidayCell = entry?.isHoliday ?? isWeekend;
-    final isBlank = entry == null || (entry.hours.isEmpty && entry.code.isEmpty);
+    final isBlank =
+        entry == null || (entry.hours.isEmpty && entry.code.isEmpty);
     final hasCustomTime = !isBlank && entry.hasCustomTime;
 
     final isPaidLeave = !isBlank && ShiftCode.isPaidLeave(entry.code);
@@ -1686,7 +1702,9 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     final label = isBlank
         ? ''
         : (hasCustomTime
-              ? (hoursValue != null ? hoursValue.toStringAsFixed(2) : entry.hours)
+              ? (hoursValue != null
+                    ? hoursValue.toStringAsFixed(2)
+                    : entry.hours)
               : (isPaidLeave
                     ? ShiftCode.paidLeaveCode
                     : (hoursValue != null
