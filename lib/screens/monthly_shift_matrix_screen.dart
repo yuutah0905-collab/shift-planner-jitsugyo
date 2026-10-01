@@ -295,6 +295,14 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
   Timer? _remarksSaveDebounce;
   bool _remarksLoaded = false;
 
+  // Pinch-to-zoom support for the readOnly (part-time staff's published
+  // view) matrix only - the adaptive sizing above shrinks cells/text to
+  // fit the whole month on screen, which some staff found hard to read.
+  // Lets them pinch-zoom in to read small text, while the table's own
+  // nested scroll views (name column / header row / body) still handle
+  // panning around once zoomed - see panEnabled: false below.
+  final TransformationController _zoomController = TransformationController();
+
   static const List<String> _dowJp = ['日', '月', '火', '水', '木', '金', '土'];
 
   // These start at their "roomy" defaults but are shrunk dynamically in
@@ -550,7 +558,16 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
     _bodyHController.dispose();
     _remarksSaveDebounce?.cancel();
     _remarksController.dispose();
+    _zoomController.dispose();
     super.dispose();
+  }
+
+  /// Resets the pinch-zoom level back to 1:1, shown as a small floating
+  /// button only once the staff member has actually zoomed in (readOnly
+  /// mode only - see [_zoomController]).
+  void _resetZoom() {
+    _zoomController.value = Matrix4.identity();
+    setState(() {});
   }
 
   void _buildRosterOrder() {
@@ -1084,7 +1101,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                   Expanded(
                     child: Text(
                       widget.readOnly
-                          ? '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ 最下部の「合計」行はその日の全員の合計時間'
+                          ? '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ ピンチ操作で拡大できます ・ 最下部の「合計」行はその日の全員の合計時間'
                           : '$_month月（$_daysInMonth日分）／ ${rows.length}名 ・ セルをタップで時間を修正 ・ 最下部の「合計」行はその日の全員の合計時間',
                       style: const TextStyle(
                         fontSize: 11,
@@ -1115,12 +1132,7 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
                         ],
                       ),
                     )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        _computeAdaptiveSizes(constraints, rows.length);
-                        return _buildMatrix(rows);
-                      },
-                    ),
+                  : _buildMatrixArea(rows),
             ),
             _buildRemarksSection(),
           ],
@@ -1223,6 +1235,56 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
         fontSize: 12,
       ),
       side: BorderSide(color: selected ? AppColors.primary : AppColors.line),
+    );
+  }
+
+  /// Wraps [_buildMatrix] with pinch-to-zoom (readOnly/staff view only) so
+  /// part-time staff who find the auto-shrunk cells/text hard to read can
+  /// pinch in for a closer look. `panEnabled: false` is deliberate: the
+  /// table already has its own frozen-pane scroll views (name column /
+  /// header row / body, kept in sync via [_syncOffset]) for panning around
+  /// - letting InteractiveViewer ALSO pan would fight with those and break
+  /// the frozen-pane behavior. Only `scaleEnabled` (pinch) is used here; a
+  /// small "縮小に戻す" button appears once zoomed in, since a two-finger
+  /// pinch-back-out gesture is fiddly to land exactly on 1.0x.
+  Widget _buildMatrixArea(List<_PersonRow> rows) {
+    if (!widget.readOnly) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          _computeAdaptiveSizes(constraints, rows.length);
+          return _buildMatrix(rows);
+        },
+      );
+    }
+    return Stack(
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            _computeAdaptiveSizes(constraints, rows.length);
+            return InteractiveViewer(
+              transformationController: _zoomController,
+              panEnabled: false,
+              scaleEnabled: true,
+              minScale: 1.0,
+              maxScale: 3.0,
+              onInteractionEnd: (_) => setState(() {}),
+              child: _buildMatrix(rows),
+            );
+          },
+        ),
+        if (_zoomController.value != Matrix4.identity())
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: FloatingActionButton.small(
+              heroTag: null,
+              onPressed: _resetZoom,
+              tooltip: '拡大を元に戻す',
+              backgroundColor: AppColors.primary,
+              child: const Icon(Icons.zoom_out_map, color: Colors.white),
+            ),
+          ),
+      ],
     );
   }
 
