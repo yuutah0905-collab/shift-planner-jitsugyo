@@ -1278,13 +1278,33 @@ class _MonthlyShiftMatrixScreenState extends State<MonthlyShiftMatrixScreen> {
             _computeAdaptiveSizes(constraints, rows.length);
             return InteractiveViewer(
               transformationController: _zoomController,
+              // `constrained: false` is essential here: InteractiveViewer's
+              // default (`constrained: true`) forces its child to be
+              // exactly the VIEWPORT's size (via a tight BoxConstraints),
+              // which silently overrides the flat matrix's own intrinsic
+              // width/height (tableWidth/tableHeight in
+              // [_buildFlatMatrix]) and clips away everything beyond the
+              // viewport's edge - this was the bug where only the first
+              // ~17 days were visible/reachable no matter how far the
+              // table was panned, since the rest of the days literally
+              // didn't exist inside the forced-down child size. With
+              // `constrained: false`, the child keeps its real, full
+              // size (the whole month) and InteractiveViewer just pans
+              // the viewport around within it.
+              constrained: false,
               panEnabled: true,
               scaleEnabled: true,
               minScale: 1.0,
               maxScale: 4.0,
               boundaryMargin: const EdgeInsets.all(40),
               onInteractionEnd: (_) => setState(() {}),
-              child: _buildFlatMatrix(rows),
+              // RepaintBoundary caches the (fairly complex, many-celled)
+              // flat matrix as its own compositor layer, so panning/
+              // zooming only has to transform that cached layer on the
+              // GPU instead of re-painting every cell's Container/border/
+              // text each frame - without this, the large table visibly
+              // stutters ("カクカクする") while pinching/dragging.
+              child: RepaintBoundary(child: _buildFlatMatrix(rows)),
             );
           },
         ),
