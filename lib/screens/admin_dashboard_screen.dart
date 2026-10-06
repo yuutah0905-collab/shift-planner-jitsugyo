@@ -24,6 +24,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _loading = true;
   String? _error;
   String _filterMonth = '';
+  // True once the admin has explicitly picked a PAST month via "月を選択"
+  // (see [_pickMonth]) - distinct from the default "今月のみ表示" state,
+  // so the UI can show which past month is being viewed/edited (the
+  // app's own current target month moving on to November, say, should
+  // not silently kick the admin back out of editing October's matrix).
+  bool _isPastMonthView = false;
 
   /// '' means "すべての部署" (no filter). This single selection now drives
   /// BOTH the submission list filter AND the unsubmitted-employee banner,
@@ -41,6 +47,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _isPastMonthView = false;
     });
     try {
       final config = await _firestoreService.fetchConfig();
@@ -66,6 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _isPastMonthView = false;
     });
     try {
       final list = await _firestoreService.fetchAllSubmissions();
@@ -80,6 +88,126 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _loading = false;
       });
     }
+  }
+
+  /// Loads submissions for one SPECIFIC past month the admin picked via
+  /// "月を選択" (see [_pickMonth]) - unlike [_load], this does NOT touch
+  /// `_filterMonth` based on the app's current config.targetMonth, since
+  /// the whole point is to look at/edit a month OTHER than whatever is
+  /// currently the live target month (e.g. editing last month's matrix
+  /// after the app has already moved on to this month). The employee
+  /// roster is still refreshed from config so names/order stay correct.
+  Future<void> _loadForMonth(String month) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final config = await _firestoreService.fetchConfig();
+      _departments = config.departments;
+      _employees = config.employees;
+      final list = await _firestoreService.fetchSubmissionsForMonth(month);
+      setState(() {
+        _submissions = list;
+        _filterMonth = month;
+        _isPastMonthView = true;
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = 'データの取得に失敗しました';
+        _loading = false;
+      });
+    }
+  }
+
+  /// Shows a bottom sheet listing every month that has at least one shift
+  /// submission (newest first, via [FirestoreService.fetchAvailableMonths])
+  /// so the admin can jump to and edit/view a PAST month's shift matrix -
+  /// even after the app's current target month has already moved on (the
+  /// original gap this closes: once November starts, October's banner on
+  /// the staff screen disappears and the default "今月のみ表示" dashboard
+  /// view switches to November too, leaving no way back into October's
+  /// matrix to fix a mistake).
+  Future<void> _pickMonth() async {
+    List<String> months;
+    try {
+      months = await _firestoreService.fetchAvailableMonths();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('月の一覧の取得に失敗しました: $e')));
+      return;
+    }
+    if (!mounted) return;
+    if (months.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('まだ提出されたシフトがありません')));
+      return;
+    }
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_month_outlined,
+                    color: AppColors.primaryDeep,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '月を選択',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppColors.primaryDeep,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(
+                '過去の月を選ぶと、その月のシフト希望一覧・一覧表を表示・編集できます',
+                style: TextStyle(fontSize: 12, color: AppColors.inkMute),
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: months.length,
+                itemBuilder: (context, index) {
+                  final m = months[index];
+                  return ListTile(
+                    leading: const Icon(
+                      Icons.event_note_outlined,
+                      color: AppColors.primary,
+                    ),
+                    title: Text(_fmtMonthJp(m)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(sheetContext).pop(m),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (selected == null) return;
+    await _loadForMonth(selected);
   }
 
   String _fmtMonthJp(String ym) {
@@ -207,7 +335,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _filterMonth.isEmpty ? _loadAll : _load,
+            onPressed: _isPastMonthView
+                ? () => _loadForMonth(_filterMonth)
+                : (_filterMonth.isEmpty ? _loadAll : _load),
           ),
         ],
       ),
@@ -311,9 +441,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             child: const Text('すべて表示'),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickMonth,
+                            icon: const Icon(
+                              Icons.calendar_month_outlined,
+                              size: 16,
+                            ),
+                            label: const Text('月を選択'),
+                          ),
+                        ),
                       ],
                     ),
                   ),
+                  if (_isPastMonthView && _filterMonth.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.history,
+                              size: 16,
+                              color: AppColors.primaryDeep,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                '${_fmtMonthJp(_filterMonth)}のシフトを表示中（過去の月）',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.primaryDeep,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (_filterMonth.isNotEmpty && _employees.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -572,7 +751,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           );
           if (!mounted) return;
-          _filterMonth.isEmpty ? _loadAll() : _load();
+          _isPastMonthView
+              ? _loadForMonth(_filterMonth)
+              : (_filterMonth.isEmpty ? _loadAll() : _load());
         },
       ),
     );

@@ -108,6 +108,25 @@ class FirestoreService {
         });
   }
 
+  /// Returns every distinct "YYYY-MM" target month that has at least one
+  /// shift submission, newest first - used by the admin dashboard's
+  /// "月を選択" (pick a past month) feature so an admin can jump straight
+  /// to editing a PREVIOUS month's shift matrix after the app's current
+  /// target month has already moved on (e.g. correcting October's matrix
+  /// in November, after it's no longer the default "今月のみ表示" view).
+  /// Only reads the `targetMonth` field of each doc (not the full day-by-
+  /// day data), since this is just populating a picker list.
+  Future<List<String>> fetchAvailableMonths() async {
+    final querySnapshot = await _db.collection('shift_submissions').get();
+    final months = <String>{};
+    for (final doc in querySnapshot.docs) {
+      final m = doc.data()['targetMonth']?.toString() ?? '';
+      if (m.isNotEmpty) months.add(m);
+    }
+    final sorted = months.toList()..sort((a, b) => b.compareTo(a));
+    return sorted;
+  }
+
   /// Fetch all shift submissions (used when admin wants to see everything)
   Future<List<ShiftSubmission>> fetchAllSubmissions() async {
     final querySnapshot = await _db.collection('shift_submissions').get();
