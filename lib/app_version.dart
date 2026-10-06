@@ -35,11 +35,18 @@ class AppVersion {
   /// The current app version shown in the shift-request screen and at
   /// the top of the update history list. Bump this on every deploy that
   /// includes a user-facing change.
-  static const String currentVersion = '2.5';
+  static const String currentVersion = '2.6';
 
   /// Newest first. The very first entry (v1.0) marks the state of the
   /// app at the point this versioning system was introduced.
   static const List<UpdateEntry> updateHistory = [
+    UpdateEntry(
+      version: '2.6',
+      date: '2026-10-01',
+      notes: [
+        '（管理者向け）シフト希望一覧画面に「月を選択」ボタンを追加しました。過去の月を選んで、その月のシフト希望・一覧表を表示・編集できるようになりました',
+      ],
+    ),
     UpdateEntry(
       version: '2.5',
       date: '2026-10-01',
